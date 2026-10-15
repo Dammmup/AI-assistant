@@ -40,6 +40,8 @@ export interface AppointmentDoc {
   startedAt: Date | null;
   endedAt: Date | null;
   consentId: ObjectId | null;
+  /** Блокировка от параллельной разметки по говорящим. */
+  diarizeLockUntil?: Date | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -74,6 +76,8 @@ export interface RecordingDoc {
 
 export type SegmentStatus = "pending" | "done" | "failed";
 
+export type Speaker = "doctor" | "patient" | "unknown";
+
 export interface SegmentDoc {
   _id: ObjectId;
   recordingId: ObjectId;
@@ -86,6 +90,10 @@ export interface SegmentDoc {
   durationSeconds: number;
   status: SegmentStatus;
   text: string;
+  /** Предложения распознанного текста — единицы разметки по говорящим. */
+  units?: string[];
+  /** Говорящий для каждого предложения; null — разметка ещё не выполнена. */
+  speakers?: Speaker[] | null;
   error: string | null;
   attempts: number;
   createdAt: Date;

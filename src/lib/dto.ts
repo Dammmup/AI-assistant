@@ -4,6 +4,7 @@ import type {
   DocumentStatus,
   RecordingStatus,
   SegmentStatus,
+  Speaker,
   SpeechLanguage,
   TemplateField,
   TranscriptStatus,
@@ -36,6 +37,8 @@ export interface SegmentDTO {
   error: string | null;
   durationSeconds: number;
   size: number; // байты
+  units: string[];
+  speakers: Speaker[] | null;
   stale: boolean;
 }
 

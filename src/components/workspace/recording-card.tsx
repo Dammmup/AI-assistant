@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { apiFetch, fmtBytes, fmtDuration } from "@/lib/client";
 import type { AppointmentDTO } from "@/lib/dto";
 import { LANGUAGE_LABEL } from "@/lib/labels";
@@ -14,10 +14,12 @@ export function RecordingCard({
   appt,
   onChange,
   onLiveSegment,
+  onPendingChange,
 }: {
   appt: AppointmentDTO;
   onChange: () => Promise<void>;
   onLiveSegment: (s: UploadedSegment) => void;
+  onPendingChange: (n: number) => void;
 }) {
   const rec = useSegmentRecorder({ appointmentId: appt.id, onSegment: onLiveSegment });
   const [error, setError] = useState<string | null>(null);
@@ -31,6 +33,7 @@ export function RecordingCard({
   const canStart = consentOk && ["draft", "review", "recording"].includes(appt.status) && !recordingHere;
   const failed = rec.queue.filter((q) => q.state === "failed");
   const inFlight = rec.queue.filter((q) => q.state !== "failed");
+  useEffect(() => onPendingChange(inFlight.length), [inFlight.length, onPendingChange]);
 
   async function start() {
     setError(null);
@@ -170,6 +173,11 @@ export function RecordingCard({
               <span className="h-2 w-28 overflow-hidden rounded-full bg-slate-200" title="Уровень сигнала микрофона">
                 <span className="block h-full bg-emerald-500 transition-[width] duration-100" style={{ width: `${Math.round(rec.level * 100)}%` }} />
               </span>
+              {rec.latency !== null && (
+                <span className={rec.latency > 5 ? "text-amber-700" : "text-slate-500"} title="Время от конца фразы до появления текста">
+                  задержка текста ~{rec.latency.toFixed(1)} с
+                </span>
+              )}
               {inFlight.length > 0 && (
                 <span className="text-slate-500">
                   отправка фрагментов: {inFlight.length} ({fmtBytes(inFlight.reduce((s, q) => s + q.blob.size, 0))})
@@ -215,8 +223,8 @@ export function RecordingCard({
         {appt.status === "processing" && <Alert tone="blue">Идёт распознавание оставшихся фрагментов…</Alert>}
         {error && <Alert>{error}</Alert>}
         <p className="text-xs text-slate-500">
-          Текст появляется фрагментами примерно каждые 15 секунд. Фактическая задержка и качество распознавания зависят от сети, микрофона и
-          акустических условий.
+          Текст появляется после каждой фразы — запись нарезается по паузам в речи (фрагменты 3–12 с). Реплики автоматически размечаются
+          «Врач» / «Пациент»; разметку можно исправить при проверке. Задержка и качество зависят от сети, микрофона и акустики.
         </p>
       </div>
     </Card>

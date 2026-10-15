@@ -1,9 +1,9 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { apiFetch, fmtDate, fmtDateTime } from "@/lib/client";
-import type { AppointmentDTO, TemplateDTO } from "@/lib/dto";
+import type { AppointmentDTO, SegmentDTO, TemplateDTO } from "@/lib/dto";
 import { AppointmentStatusBadge } from "../status";
 import { Alert, Button, Card } from "../ui";
 import { ConsentCard } from "./consent-card";
@@ -34,15 +34,60 @@ export function Workspace({ initial, templates }: { initial: AppointmentDTO; tem
     return () => clearInterval(t);
   }, [polling, refresh]);
 
+  // Разметка «врач / пациент» во время записи: не чаще раза в 6 с, без параллельных запросов.
+  const diarizeRef = useRef({ inFlight: false, again: false, last: 0, timer: undefined as ReturnType<typeof setTimeout> | undefined });
+  const runDiarize = useCallback(async () => {
+    const d = diarizeRef.current;
+    if (d.inFlight) {
+      d.again = true;
+      return;
+    }
+    const wait = 6000 - (Date.now() - d.last);
+    if (wait > 0) {
+      clearTimeout(d.timer);
+      d.timer = setTimeout(runDiarize, wait);
+      return;
+    }
+    d.inFlight = true;
+    d.last = Date.now();
+    try {
+      const labels = await apiFetch<{ id: string; units: string[]; speakers: SegmentDTO["speakers"] }[]>(`/api/appointments/${initial.id}/diarize`, {
+        method: "POST",
+      });
+      const byId = new Map(labels.map((l) => [l.id, l]));
+      setAppt((prev) => ({
+        ...prev,
+        segments: prev.segments.map((sg) => {
+          const l = byId.get(sg.id);
+          return l?.speakers ? { ...sg, units: l.units, speakers: l.speakers } : sg;
+        }),
+      }));
+    } catch {
+      // Разметка вторична: при ошибке текст остаётся без меток, при завершении записи она повторится на сервере.
+    } finally {
+      d.inFlight = false;
+      if (d.again) {
+        d.again = false;
+        void runDiarize();
+      }
+    }
+  }, [initial.id]);
+  useEffect(() => () => clearTimeout(diarizeRef.current.timer), []);
+
   // Живое обновление транскрипции по мере распознавания фрагментов.
-  const onLiveSegment = useCallback((s: UploadedSegment) => {
-    setAppt((prev) => {
-      const segments = prev.segments.filter((x) => x.id !== s.id);
-      segments.push({ ...s, source: "microphone", stale: false });
-      segments.sort((a, b) => a.seq - b.seq);
-      return { ...prev, segments };
-    });
-  }, []);
+  const onLiveSegment = useCallback(
+    (s: UploadedSegment) => {
+      setAppt((prev) => {
+        const segments = prev.segments.filter((x) => x.id !== s.id);
+        segments.push({ ...s, source: "microphone", stale: false });
+        segments.sort((a, b) => a.seq - b.seq);
+        return { ...prev, segments };
+      });
+      if (s.status === "done" && s.units.length && !s.speakers) void runDiarize();
+    },
+    [runDiarize],
+  );
+  const [pendingUploads, setPendingUploads] = useState(0);
 
   async function changeStatus(action: "complete" | "reopen" | "archive") {
     setBusy(action);
@@ -84,8 +129,8 @@ export function Workspace({ initial, templates }: { initial: AppointmentDTO; tem
       {error && <Alert>{error}</Alert>}
 
       <ConsentCard appt={appt} onChange={refresh} />
-      {appt.consent && <RecordingCard appt={appt} onChange={refresh} onLiveSegment={onLiveSegment} />}
-      <TranscriptCard appt={appt} onChange={refresh} />
+      {appt.consent && <RecordingCard appt={appt} onChange={refresh} onLiveSegment={onLiveSegment} onPendingChange={setPendingUploads} />}
+      <TranscriptCard appt={appt} onChange={refresh} pendingUploads={pendingUploads} />
       <DocumentsCard appt={appt} templates={templates} onChange={refresh} />
 
       {appt.status === "review" && (

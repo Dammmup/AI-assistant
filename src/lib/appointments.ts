@@ -2,9 +2,9 @@ import { ObjectId } from "mongodb";
 import { Readable } from "node:stream";
 import { collections } from "./db";
 import { HttpError } from "./http";
-import { AiError, PROVIDER, transcribeAudio } from "./ai";
+import { AiError, PROVIDER, labelSpeakers, transcribeAudio } from "./ai";
 import type { SessionUser } from "./auth";
-import type { AppointmentDoc, AppointmentStatus, SegmentDoc, TranscriptDoc } from "./types";
+import type { AppointmentDoc, AppointmentStatus, SegmentDoc, Speaker, TranscriptDoc } from "./types";
 
 /** Фрагмент считается «зависшим», если обработка не завершилась за это время (например, оборвалось соединение). */
 const STALE_PENDING_MS = 2 * 60_000;
@@ -83,10 +83,29 @@ export async function ensureRecording(appt: AppointmentDoc) {
   return res!;
 }
 
-function composeText(segments: Pick<SegmentDoc, "status" | "text">[]) {
-  return segments
-    .filter((s) => s.status === "done" && s.text)
-    .map((s) => s.text.trim())
+export const SPEAKER_PREFIX: Record<Exclude<Speaker, "unknown">, string> = { doctor: "Врач", patient: "Пациент" };
+
+type ComposeSeg = Pick<SegmentDoc, "status" | "text" | "units" | "speakers">;
+
+/** Реплики фрагмента: предложения с говорящими (если разметка есть) либо текст целиком. */
+function segmentLines(s: ComposeSeg): { speaker: Speaker | null; text: string }[] {
+  if (s.units?.length && s.speakers?.length === s.units.length) return s.units.map((text, i) => ({ speaker: s.speakers![i], text }));
+  return s.text.trim() ? [{ speaker: null, text: s.text.trim() }] : [];
+}
+
+/** Собирает диалог: соседние реплики одного говорящего объединяются в одну строку «Врач: …». */
+export function composeText(segments: ComposeSeg[]) {
+  const lines: { speaker: Speaker | null; text: string }[] = [];
+  for (const s of segments) {
+    if (s.status !== "done") continue;
+    for (const l of segmentLines(s)) {
+      const last = lines.at(-1);
+      if (last && last.speaker === l.speaker && l.speaker !== null) last.text += ` ${l.text}`;
+      else lines.push({ ...l });
+    }
+  }
+  return lines
+    .map((l) => (l.speaker && l.speaker !== "unknown" ? `${SPEAKER_PREFIX[l.speaker]}: ${l.text}` : l.text))
     .join("\n");
 }
 
@@ -95,7 +114,9 @@ async function syncTranscript(appointmentId: ObjectId, appendText?: string) {
   const { transcripts, segments } = await collections();
   const transcript = await transcripts.findOne({ appointmentId });
   if (!transcript) return;
-  const segs = await segments.find({ appointmentId }, { sort: { seq: 1 }, projection: { status: 1, text: 1, updatedAt: 1 } }).toArray();
+  const segs = await segments
+    .find({ appointmentId }, { sort: { seq: 1 }, projection: { status: 1, text: 1, units: 1, speakers: 1, updatedAt: 1 } })
+    .toArray();
   const now = Date.now();
   const pending = segs.some((s) => s.status === "pending" && now - s.updatedAt.getTime() < STALE_PENDING_MS);
   const failed = segs.some((s) => s.status === "failed" || (s.status === "pending" && now - s.updatedAt.getTime() >= STALE_PENDING_MS));
@@ -119,6 +140,7 @@ export async function finalizeIfReady(appointmentId: ObjectId) {
   if (pending > 0) return;
   const failed = await segments.countDocuments({ appointmentId, status: { $in: ["failed", "pending"] } });
   await recordings.updateOne({ appointmentId }, { $set: { status: failed ? "partial" : "ready", updatedAt: new Date() } });
+  await diarizePending(appointmentId, { all: true });
   await syncTranscript(appointmentId);
   await appointments.updateOne({ _id: appointmentId, status: "processing" }, { $set: { status: "review", updatedAt: new Date() } });
 }
@@ -198,6 +220,8 @@ export async function saveSegment(opts: {
     durationSeconds: Math.max(0, Math.round(opts.durationSeconds * 10) / 10),
     status: "pending",
     text: "",
+    units: [],
+    speakers: null,
     error: null,
     attempts: 0,
     createdAt: now,
@@ -223,7 +247,7 @@ export async function saveSegment(opts: {
     const { segments: segs } = await collections();
     const done = await segs.findOneAndUpdate(
       { _id: segment._id },
-      { $set: { status: "done", text: "", updatedAt: new Date() } },
+      { $set: { status: "done", text: "", units: [], speakers: [], updatedAt: new Date() } },
       { returnDocument: "after" },
     );
     await syncTranscript(segment.appointmentId);
@@ -249,14 +273,14 @@ export async function processSegment(segment: SegmentDoc, data?: Buffer): Promis
   const prev = await segments.findOne({ recordingId: segment.recordingId, seq: { $lt: segment.seq }, status: "done" }, { sort: { seq: -1 } });
   let update: Partial<SegmentDoc>;
   try {
-    const text = await transcribeAudio({
+    const result = await transcribeAudio({
       data: data ?? (await readAudio(segment.audioFileId)),
       mimeType: segment.mimeType.split(";")[0],
       filename: `segment-${segment.seq}.${audioExt(segment.mimeType) ?? "webm"}`,
       language: appt.language,
       previousText: prev?.text,
     });
-    update = { status: "done", text, error: null };
+    update = { status: "done", text: result.text, units: result.units, speakers: result.units.length ? null : [], error: null };
   } catch (err) {
     if (!(err instanceof AiError)) console.error(err);
     update = { status: "failed", error: err instanceof AiError ? err.message : "Ошибка распознавания" };
@@ -270,4 +294,54 @@ export async function processSegment(segment: SegmentDoc, data?: Buffer): Promis
   await syncTranscript(segment.appointmentId, update.status === "done" ? update.text : undefined);
   await finalizeIfReady(segment.appointmentId);
   return updated!;
+}
+
+const DIARIZE_BATCH = 40;
+const CONTEXT_UNITS = 12;
+
+/**
+ * Размечает по говорящим распознанные, но ещё не размеченные фрагменты.
+ * Ошибка разметки не влияет на транскрипцию: текст остаётся без меток.
+ */
+export async function diarizePending(appointmentId: ObjectId, opts: { all?: boolean } = {}) {
+  if (process.env.DIARIZATION === "off") return;
+  const { appointments, segments } = await collections();
+  const now = new Date();
+  const lock = await appointments.findOneAndUpdate(
+    { _id: appointmentId, $or: [{ diarizeLockUntil: { $exists: false } }, { diarizeLockUntil: null }, { diarizeLockUntil: { $lt: now } }] },
+    { $set: { diarizeLockUntil: new Date(now.getTime() + 45_000) } },
+  );
+  if (!lock) return;
+  try {
+    for (let round = 0; round < (opts.all ? 10 : 1); round++) {
+      const todo = await segments
+        .find({ appointmentId, status: "done", speakers: null, "units.0": { $exists: true } }, { sort: { seq: 1 }, limit: DIARIZE_BATCH })
+        .toArray();
+      if (!todo.length) break;
+      const before = await segments
+        .find({ appointmentId, status: "done", seq: { $lt: todo[0].seq }, "speakers.0": { $exists: true } }, { sort: { seq: -1 }, limit: 6 })
+        .toArray();
+      const context = before
+        .reverse()
+        .flatMap((s) => (s.units ?? []).map((text, i) => ({ speaker: s.speakers![i] ?? "unknown", text })))
+        .slice(-CONTEXT_UNITS);
+      const units = todo.flatMap((s) => s.units!);
+      let labels: Speaker[];
+      try {
+        labels = await labelSpeakers({ context, units });
+      } catch (err) {
+        if (!(err instanceof AiError)) console.error(err);
+        break;
+      }
+      let k = 0;
+      for (const s of todo) {
+        const speakers = labels.slice(k, k + s.units!.length);
+        k += s.units!.length;
+        await segments.updateOne({ _id: s._id }, { $set: { speakers } });
+      }
+      await syncTranscript(appointmentId);
+    }
+  } finally {
+    await appointments.updateOne({ _id: appointmentId }, { $set: { diarizeLockUntil: null } });
+  }
 }

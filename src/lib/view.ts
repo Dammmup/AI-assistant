@@ -109,6 +109,8 @@ export async function appointmentDTO(appt: AppointmentDoc): Promise<AppointmentD
       error: s.error,
       durationSeconds: s.durationSeconds,
       size: s.size,
+      units: s.units ?? [],
+      speakers: s.speakers ?? null,
       stale: s.status === "pending" && now - s.updatedAt.getTime() > STALE_MS,
     })),
     transcript: transcript

@@ -1,7 +1,7 @@
 import { api, HttpError, ok, oid } from "@/lib/http";
 import { requireUser } from "@/lib/auth";
 import { collections } from "@/lib/db";
-import { getOwnAppointment, processSegment, requireConsent } from "@/lib/appointments";
+import { diarizePending, getOwnAppointment, processSegment, requireConsent } from "@/lib/appointments";
 
 type Ctx = { params: Promise<{ id: string }> };
 export const maxDuration = 60;
@@ -18,5 +18,6 @@ export const POST = api<Ctx>(async (_req, { params }) => {
   const emptyDone = segment.status === "done" && !segment.text;
   if (segment.status !== "failed" && !stale && !emptyDone) throw new HttpError(409, "Фрагмент уже обработан или обрабатывается");
   const updated = await processSegment(segment);
+  if (updated.status === "done") await diarizePending(appt._id, { all: true });
   return ok({ status: updated.status, text: updated.text, error: updated.error });
 });

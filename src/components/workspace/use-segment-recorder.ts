@@ -2,13 +2,23 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 
-/** Длина фрагмента: каждый фрагмент — самостоятельный аудиофайл, который сразу отправляется на распознавание. */
-const SEGMENT_MS = 15_000;
+/**
+ * Нарезка по паузам: фрагмент закрывается в паузе после фразы (не раньше MIN_SEGMENT_MS),
+ * но не длиннее MAX_SEGMENT_MS. Каждый фрагмент — самостоятельный аудиофайл, который сразу уходит на распознавание.
+ */
+const MIN_SEGMENT_MS = 2500;
+const MAX_SEGMENT_MS = 12_000;
+/** Длительность паузы, после которой фраза считается законченной. */
+const PAUSE_MS = 700;
+/** Минимальный уровень речи (RMS); фактический порог адаптируется к фоновому шуму. */
+const VOICE_RMS_MIN = 0.008;
 /** Ниже этого уровня (RMS, ≈ −60 дБ) фрагмент считается тишиной. Порог намеренно низкий: тихую речь лучше распознать, чем потерять. */
 const SILENCE_RMS = 0.001;
 const MAX_ATTEMPTS = 4;
 
 export type UploadedSegment = {
+  units: string[];
+  speakers: ("doctor" | "patient" | "unknown")[] | null;
   id: string;
   seq: number;
   status: "pending" | "done" | "failed";
@@ -60,6 +70,10 @@ export function useSegmentRecorder(opts: { appointmentId: string; onSegment: (s:
   const runningRef = useRef(false);
   const seqRef = useRef(0);
   const peakRef = useRef(0);
+  // Детектор речи для нарезки по паузам.
+  const vadRef = useRef({ segStart: 0, lastVoice: 0, hadVoice: false, noiseFloor: 0.004 });
+  const endedAtRef = useRef(new Map<number, number>());
+  const [latency, setLatency] = useState<number | null>(null);
   const queueRef = useRef<QueueItem[]>([]);
   const pumpingRef = useRef(false);
   const timersRef = useRef<{ seg?: ReturnType<typeof setTimeout>; tick?: ReturnType<typeof setInterval>; meter?: ReturnType<typeof setInterval> }>({});
@@ -104,6 +118,11 @@ export function useSegmentRecorder(opts: { appointmentId: string; onSegment: (s:
         try {
           const seg = await upload(item);
           queueRef.current = queueRef.current.filter((i) => i !== item);
+          const endedAt = endedAtRef.current.get(item.seq);
+          if (endedAt) {
+            setLatency((performance.now() - endedAt) / 1000);
+            endedAtRef.current.delete(item.seq);
+          }
           onSegmentRef.current(seg);
         } catch (err) {
           const e = err as UploadError;
@@ -137,6 +156,7 @@ export function useSegmentRecorder(opts: { appointmentId: string; onSegment: (s:
       const chunks: Blob[] = [];
       const started = performance.now();
       peakRef.current = 0;
+      vadRef.current = { ...vadRef.current, segStart: performance.now(), lastVoice: performance.now(), hadVoice: false };
       rec.ondataavailable = (e) => {
         if (e.data.size) chunks.push(e.data);
       };
@@ -148,7 +168,9 @@ export function useSegmentRecorder(opts: { appointmentId: string; onSegment: (s:
         const meterOk = audioCtxRef.current?.state === "running" && peakRef.current > 0;
         const silent = meterOk && peakRef.current < SILENCE_RMS;
         if (blob.size > 0 && duration > 0.5) {
-          queueRef.current.push({ seq: seqRef.current++, blob, duration, silent, state: "queued", attempts: 0 });
+          const seq = seqRef.current++;
+          endedAtRef.current.set(seq, performance.now());
+          queueRef.current.push({ seq, blob, duration, silent, state: "queued", attempts: 0 });
           syncQueue();
           void pump();
         }
@@ -159,7 +181,7 @@ export function useSegmentRecorder(opts: { appointmentId: string; onSegment: (s:
       recorderRef.current = rec;
       timersRef.current.seg = setTimeout(() => {
         if (rec.state === "recording") rec.stop();
-      }, SEGMENT_MS);
+      }, MAX_SEGMENT_MS + 500);
     },
     [pump],
   );
@@ -219,6 +241,27 @@ export function useSegmentRecorder(opts: { appointmentId: string; onSegment: (s:
           for (const v of buf) sum += v * v;
           const rms = Math.sqrt(sum / buf.length);
           peakRef.current = Math.max(peakRef.current, rms);
+          // Нарезка по паузам.
+          const vad = vadRef.current;
+          const now = performance.now();
+          const threshold = Math.max(VOICE_RMS_MIN, vad.noiseFloor * 3);
+          if (rms > threshold) {
+            vad.lastVoice = now;
+            vad.hadVoice = true;
+            // Медленная подстройка вверх — на случай постоянного громкого фона.
+            vad.noiseFloor = vad.noiseFloor * 0.998 + rms * 0.002;
+          } else {
+            vad.noiseFloor = vad.noiseFloor * 0.97 + rms * 0.03;
+          }
+          const rec = recorderRef.current;
+          const segAge = now - vad.segStart;
+          if (runningRef.current && rec?.state === "recording" && segAge >= MIN_SEGMENT_MS) {
+            const phraseEnded = vad.hadVoice && now - vad.lastVoice >= PAUSE_MS;
+            if (phraseEnded || segAge >= MAX_SEGMENT_MS) {
+              clearTimeout(timersRef.current.seg);
+              rec.stop();
+            }
+          }
           setLevel(Math.min(1, rms * 8));
         }, 100);
       } catch {
@@ -277,5 +320,5 @@ export function useSegmentRecorder(opts: { appointmentId: string; onSegment: (s:
     };
   }, []);
 
-  return { phase, elapsed, level, queue, error, start, stop, retryFailed };
+  return { phase, elapsed, level, queue, error, latency, start, stop, retryFailed };
 }

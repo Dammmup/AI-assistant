@@ -41,24 +41,87 @@ const MEDICAL_PROMPT = {
   kk: "Дәрігер қабылдауы. Шағымдар, анамнез, диагноз, тағайындаулар.",
 };
 
+export type TranscriptionResult = { text: string; units: string[] };
+
+/** Делит текст на предложения — единицы, которым затем назначается говорящий. */
+export function splitSentences(text: string): string[] {
+  return text
+    .split(/(?<=[.!?…])\s+/)
+    .map((x) => x.trim())
+    .filter(Boolean);
+}
+
 export async function transcribeAudio(opts: {
   data: Buffer;
   mimeType: string;
   filename: string;
   language: SpeechLanguage;
   previousText?: string;
-}): Promise<string> {
+}): Promise<TranscriptionResult> {
   const form = new FormData();
   form.append("file", new Blob([new Uint8Array(opts.data)], { type: opts.mimeType }), opts.filename);
   form.append("model", STT_MODEL);
-  form.append("response_format", "json");
+  form.append("response_format", "verbose_json");
   form.append("temperature", "0");
   if (opts.language !== "auto") form.append("language", opts.language);
   // Подсказка: медицинская лексика + конец предыдущего фрагмента для связности.
   const hint = `${MEDICAL_PROMPT[opts.language === "kk" ? "kk" : "ru"]} ${(opts.previousText ?? "").slice(-400)}`.trim();
   form.append("prompt", hint);
-  const json = (await call("/audio/transcriptions", { method: "POST", body: form }, 55_000)) as { text?: string };
-  return removeHallucinations(json.text ?? "");
+  const json = (await call("/audio/transcriptions", { method: "POST", body: form }, 55_000)) as {
+    text?: string;
+    segments?: { text: string; no_speech_prob?: number; avg_logprob?: number }[];
+  };
+  // Отбрасываем куски, которые модель сама считает «не речью» (типичный источник выдуманного текста).
+  const pieces = json.segments?.length
+    ? json.segments.filter((sg) => !((sg.no_speech_prob ?? 0) > 0.6 && (sg.avg_logprob ?? 0) < -1)).map((sg) => sg.text)
+    : [json.text ?? ""];
+  const units = pieces.flatMap((t) => splitSentences(removeHallucinations(t)));
+  return { text: units.join(" "), units };
+}
+
+import type { Speaker } from "./types";
+
+const DIARIZE_PROMPT = `Ты размечаешь транскрипцию медицинского приёма по говорящим. Участники: врач и пациент (или его представитель).
+Для каждой пронумерованной реплики определи, кто её произнёс: "D" — врач, "P" — пациент, "U" — нельзя определить.
+Подсказки: врач задаёт вопросы о жалобах и анамнезе, озвучивает осмотр, диагноз, назначения и рекомендации; пациент описывает своё самочувствие, отвечает на вопросы.
+Короткие ответы («да», «нет», «понятно») обычно принадлежат собеседнику того, кто задал вопрос.
+Текст реплик НЕ изменяй и не пересказывай. Ответ — строго JSON: {"labels": ["D", "P", ...]} — ровно по одной метке на каждую новую реплику, в том же порядке.`;
+
+/** Назначает говорящего каждой реплике. Текст не меняется — модель возвращает только метки. */
+export async function labelSpeakers(opts: {
+  context: { speaker: Speaker; text: string }[];
+  units: string[];
+}): Promise<Speaker[]> {
+  const model = process.env.DIARIZE_MODEL || LLM_MODEL;
+  const ctx = opts.context.length
+    ? `Предыдущие реплики (уже размечены, для контекста):\n${opts.context
+        .map((c) => `${c.speaker === "doctor" ? "D" : c.speaker === "patient" ? "P" : "U"}: ${c.text}`)
+        .join("\n")}\n\n`
+    : "";
+  const body: Record<string, unknown> = {
+    model,
+    temperature: 0,
+    response_format: { type: "json_object" },
+    messages: [
+      { role: "system", content: DIARIZE_PROMPT },
+      { role: "user", content: `${ctx}Новые реплики для разметки (${opts.units.length}):\n${opts.units.map((u, i) => `${i + 1}. ${u}`).join("\n")}` },
+    ],
+  };
+  if (model.startsWith("openai/gpt-oss")) body.reasoning_effort = "low";
+  const json = (await call(
+    "/chat/completions",
+    { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) },
+    30_000,
+  )) as { choices?: { message?: { content?: string } }[] };
+  let labels: unknown = [];
+  try {
+    labels = JSON.parse(json.choices?.[0]?.message?.content ?? "{}").labels;
+  } catch {}
+  const arr = Array.isArray(labels) ? labels : [];
+  return opts.units.map((_, i) => {
+    const l = String(arr[i] ?? "").trim().toUpperCase();
+    return l.startsWith("D") ? "doctor" : l.startsWith("P") ? "patient" : "unknown";
+  });
 }
 
 /** Типичные «галлюцинации» Whisper на тишине и шуме (фразы из субтитров видео). */
@@ -90,7 +153,7 @@ const SYSTEM_PROMPT = `Ты — ассистент врача, который п
 4. Если сведения неоднозначны, противоречивы, плохо распознаны или неясно, кто их произнёс — заполни то, что прозвучало, и поставь status: "uncertain".
 5. Для каждого заполненного поля приведи в evidence дословную короткую цитату из транскрипции (на языке оригинала), подтверждающую значение.
 6. Значения пиши кратко, медицинским стилем, на русском языке. Отрицательные сведения («аллергии отрицает») — это тоже сведения, если они прозвучали.
-7. Транскрипция не размечена по говорящим: учитывай контекст (вопросы задаёт обычно врач, жалобы озвучивает пациент).
+7. Реплики в транскрипции размечены «Врач:» / «Пациент:» автоматически — разметка может содержать ошибки, учитывай и контекст. Строки без метки — говорящий не определён.
 Ответ — строго JSON-объект вида:
 {"fields": {"<key>": {"value": string | null, "status": "filled" | "uncertain" | "missing", "evidence": string | null}}}`;
 

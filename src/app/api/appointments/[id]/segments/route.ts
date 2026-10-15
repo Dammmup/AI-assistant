@@ -46,6 +46,8 @@ export const POST = api<Ctx>(async (req, { params }) => {
     text: segment.text,
     error: segment.error,
     size: segment.size,
+    units: segment.units ?? [],
+    speakers: segment.speakers ?? null,
     durationSeconds: segment.durationSeconds,
   });
 });
