@@ -5,6 +5,7 @@ import { apiFetch } from "@/lib/client";
 import type { SegmentDTO } from "@/lib/dto";
 import { cx } from "../ui";
 import type { Phase, QueueItem } from "./use-segment-recorder";
+import type { RealtimeStatus } from "./use-realtime-stt";
 
 type Light = "green" | "yellow" | "red" | "gray";
 
@@ -145,6 +146,7 @@ type ProviderCheck = {
   sttAvailable: boolean | null;
   llmAvailable: boolean | null;
   error: string | null;
+  realtime: { ok: boolean; latencyMs: number; error: string | null; model: string } | null;
 };
 
 /* ---------------- Панель ---------------- */
@@ -154,11 +156,14 @@ export function Preflight({
   level,
   queue,
   segments,
+  realtimeStatus = null,
 }: {
   phase: Phase;
   level: number;
   queue: QueueItem[];
   segments: SegmentDTO[];
+  /** Состояние потокового распознавания (Soniox) или null, если оно не настроено. */
+  realtimeStatus?: RealtimeStatus | null;
 }) {
   const net = useConnection();
   const [mic, setMic] = useState<MicState>({ kind: "unknown" });
@@ -301,7 +306,31 @@ export function Preflight({
       sttDetail = `${stt.sttModel} · ответ ${stt.latencyMs} мс`;
     }
   }
-  if (segments.length && (recording || phase === "stopping")) {
+  // Потоковое распознавание (Soniox) — основной режим; Groq — резервный.
+  if (stt?.realtime && !sttError) {
+    if (stt.realtime.ok) {
+      sttLight = stt.ok ? "green" : "yellow";
+      sttStatus = "Мгновенное (Soniox)";
+      sttDetail = `${stt.realtime.model} · ответ ${stt.realtime.latencyMs} мс${stt.ok ? " · резерв Groq готов" : " · резерв Groq недоступен"}`;
+    } else {
+      sttLight = stt.ok ? "yellow" : "red";
+      sttStatus = stt.ok ? "Soniox недоступен — резерв Groq" : "Сервисы недоступны";
+      sttDetail = stt.realtime.error ?? undefined;
+    }
+  }
+  if (realtimeStatus === "live") {
+    sttLight = "green";
+    sttStatus = "Мгновенное распознавание";
+    sttDetail = "Soniox · слова появляются по мере речи";
+  } else if (realtimeStatus === "connecting") {
+    sttLight = "gray";
+    sttStatus = "Подключение к Soniox…";
+  } else if (realtimeStatus === "failed" && (recording || phase === "stopping")) {
+    sttLight = "yellow";
+    sttStatus = "Резервный режим (Groq)";
+    sttDetail = "Soniox недоступен — текст появляется после каждой фразы";
+  }
+  if (segments.length && (recording || phase === "stopping") && realtimeStatus !== "live") {
     if (recentFailed >= 2) {
       sttLight = "red";
       sttStatus = "Фрагменты не распознаются";
@@ -311,9 +340,16 @@ export function Preflight({
       sttStatus = "Сбой распознавания";
       sttDetail = `${lastSeg.error ?? ""} — фрагмент сохранён, можно распознать повторно`;
     } else if (lastSeg?.status === "done" && sttLight !== "red") {
-      sttLight = "green";
-      sttStatus = "Работает";
-      sttDetail = `распознано фрагментов: ${segments.filter((s) => s.status === "done").length}`;
+      const done = segments.filter((s) => s.status === "done" && s.textSource !== "realtime").length;
+      if (realtimeStatus === "failed") {
+        sttLight = "yellow";
+        sttStatus = "Резервный режим (Groq)";
+        sttDetail = `Soniox недоступен · распознано по фразам: ${done}`;
+      } else {
+        sttLight = "green";
+        sttStatus = "Работает";
+        sttDetail = `распознано фрагментов: ${done}`;
+      }
     }
   }
 

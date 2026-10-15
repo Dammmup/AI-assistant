@@ -17,6 +17,8 @@ const SILENCE_RMS = 0.001;
 const MAX_ATTEMPTS = 4;
 
 export type UploadedSegment = {
+  startedAt: string | null;
+  textSource: "whisper" | "realtime";
   units: string[];
   speakers: ("doctor" | "patient" | "unknown")[] | null;
   id: string;
@@ -33,6 +35,9 @@ export type QueueItem = {
   blob: Blob;
   duration: number;
   silent: boolean;
+  /** false — текст этого отрезка даёт потоковое распознавание, фрагмент нужен только как аудио. */
+  transcribe: boolean;
+  startedAt: number;
   state: "queued" | "uploading" | "failed";
   attempts: number;
   error?: string;
@@ -74,6 +79,10 @@ export function useSegmentRecorder(opts: { appointmentId: string; onSegment: (s:
   const vadRef = useRef({ segStart: 0, lastVoice: 0, hadVoice: false, noiseFloor: 0.004 });
   const endedAtRef = useRef(new Map<number, number>());
   const [latency, setLatency] = useState<number | null>(null);
+  /** Нужно ли распознавать фрагменты через Whisper (false, пока работает потоковое распознавание). */
+  const transcribeRef = useRef(true);
+  const segTranscribeRef = useRef(true);
+  const segStartEpochRef = useRef(0);
   const queueRef = useRef<QueueItem[]>([]);
   const pumpingRef = useRef(false);
   const timersRef = useRef<{ seg?: ReturnType<typeof setTimeout>; tick?: ReturnType<typeof setInterval>; meter?: ReturnType<typeof setInterval> }>({});
@@ -93,6 +102,8 @@ export function useSegmentRecorder(opts: { appointmentId: string; onSegment: (s:
       form.append("duration", item.duration.toFixed(1));
       form.append("source", "microphone");
       if (item.silent) form.append("silent", "1");
+      if (!item.transcribe) form.append("transcribe", "0");
+      form.append("startedAt", String(item.startedAt));
       let res: Response;
       try {
         res = await fetch(`/api/appointments/${opts.appointmentId}/segments`, { method: "POST", body: form });
@@ -156,6 +167,8 @@ export function useSegmentRecorder(opts: { appointmentId: string; onSegment: (s:
       const chunks: Blob[] = [];
       const started = performance.now();
       peakRef.current = 0;
+      segStartEpochRef.current = Date.now();
+      segTranscribeRef.current = transcribeRef.current;
       vadRef.current = { ...vadRef.current, segStart: performance.now(), lastVoice: performance.now(), hadVoice: false };
       rec.ondataavailable = (e) => {
         if (e.data.size) chunks.push(e.data);
@@ -170,7 +183,9 @@ export function useSegmentRecorder(opts: { appointmentId: string; onSegment: (s:
         if (blob.size > 0 && duration > 0.5) {
           const seq = seqRef.current++;
           endedAtRef.current.set(seq, performance.now());
-          queueRef.current.push({ seq, blob, duration, silent, state: "queued", attempts: 0 });
+          // Если потоковое распознавание отвалилось посреди фрагмента — распознаём его через Whisper.
+          const transcribe = segTranscribeRef.current || transcribeRef.current;
+          queueRef.current.push({ seq, blob, duration, silent, transcribe, startedAt: segStartEpochRef.current, state: "queued", attempts: 0 });
           syncQueue();
           void pump();
         }
@@ -320,5 +335,11 @@ export function useSegmentRecorder(opts: { appointmentId: string; onSegment: (s:
     };
   }, []);
 
-  return { phase, elapsed, level, queue, error, latency, start, stop, retryFailed };
+  const setTranscribe = useCallback((v: boolean) => {
+    transcribeRef.current = v;
+    if (v) segTranscribeRef.current = true;
+  }, []);
+  const getStream = useCallback(() => streamRef.current, []);
+
+  return { phase, elapsed, level, queue, error, latency, start, stop, retryFailed, setTranscribe, getStream };
 }

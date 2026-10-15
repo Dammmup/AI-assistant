@@ -292,3 +292,38 @@ export async function checkProvider(): Promise<ProviderCheck> {
   lastCheck = { at: Date.now(), result };
   return result;
 }
+
+const ROLES_PROMPT = `Дан фрагмент медицинского приёма, распознанный с разделением по голосам (Голос 1, Голос 2, …).
+Определи роль каждого голоса: "doctor" — врач, "patient" — пациент или его представитель, "unknown" — нельзя определить (например, третий участник).
+Врач расспрашивает, озвучивает осмотр, диагноз и назначения; пациент рассказывает о жалобах и самочувствии. Обычно ровно один врач.
+Ответ — строго JSON: {"roles": {"<номер голоса>": "doctor" | "patient" | "unknown"}}`;
+
+/** Сопоставляет голоса потокового распознавания с ролями «врач» / «пациент». */
+export async function detectSpeakerRoles(lines: { speakerId: string; text: string }[]): Promise<Record<string, Speaker>> {
+  const model = process.env.DIARIZE_MODEL || LLM_MODEL;
+  const body: Record<string, unknown> = {
+    model,
+    temperature: 0,
+    response_format: { type: "json_object" },
+    messages: [
+      { role: "system", content: ROLES_PROMPT },
+      { role: "user", content: lines.map((l) => `Голос ${l.speakerId}: ${l.text}`).join("\n").slice(0, 12_000) },
+    ],
+  };
+  if (model.startsWith("openai/gpt-oss")) body.reasoning_effort = "low";
+  const json = (await call(
+    "/chat/completions",
+    { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) },
+    30_000,
+  )) as { choices?: { message?: { content?: string } }[] };
+  let roles: Record<string, unknown> = {};
+  try {
+    roles = JSON.parse(json.choices?.[0]?.message?.content ?? "{}").roles ?? {};
+  } catch {}
+  const out: Record<string, Speaker> = {};
+  for (const id of new Set(lines.map((l) => l.speakerId))) {
+    const r = String(roles[id] ?? "").toLowerCase();
+    out[id] = r === "doctor" ? "doctor" : r === "patient" ? "patient" : "unknown";
+  }
+  return out;
+}

@@ -12,8 +12,19 @@ import { RecordingCard } from "./recording-card";
 import { Stepper } from "./stepper";
 import { TranscriptCard } from "./transcript-card";
 import type { UploadedSegment } from "./use-segment-recorder";
+import type { LiveUtterance } from "./use-realtime-stt";
+import type { RealtimeLiveState } from "./recording-card";
+import type { Speaker } from "@/lib/types";
 
-export function Workspace({ initial, templates }: { initial: AppointmentDTO; templates: TemplateDTO[] }) {
+export function Workspace({
+  initial,
+  templates,
+  realtimeAvailable = false,
+}: {
+  initial: AppointmentDTO;
+  templates: TemplateDTO[];
+  realtimeAvailable?: boolean;
+}) {
   const [appt, setAppt] = useState(initial);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<null | string>(null);
@@ -88,6 +99,17 @@ export function Workspace({ initial, templates }: { initial: AppointmentDTO; tem
     [runDiarize],
   );
   const [pendingUploads, setPendingUploads] = useState(0);
+  const [realtime, setRealtime] = useState<RealtimeLiveState | null>(null);
+  const onUtterance = useCallback((u: LiveUtterance) => {
+    setAppt((prev) => ({
+      ...prev,
+      utterances: [
+        ...prev.utterances,
+        { id: u.clientId, clientId: u.clientId, sessionId: u.sessionId, speakerId: u.speakerId, text: u.text, startAt: new Date(u.startAt).toISOString() },
+      ],
+    }));
+  }, []);
+  const onRoles = useCallback((roles: Record<string, Speaker>) => setAppt((prev) => ({ ...prev, speakerRoles: { ...prev.speakerRoles, ...roles } })), []);
 
   async function changeStatus(action: "complete" | "reopen" | "archive") {
     setBusy(action);
@@ -129,8 +151,17 @@ export function Workspace({ initial, templates }: { initial: AppointmentDTO; tem
       {error && <Alert>{error}</Alert>}
 
       <ConsentCard appt={appt} onChange={refresh} />
-      {appt.consent && <RecordingCard appt={appt} onChange={refresh} onLiveSegment={onLiveSegment} onPendingChange={setPendingUploads} />}
-      <TranscriptCard appt={appt} onChange={refresh} pendingUploads={pendingUploads} />
+      {appt.consent && <RecordingCard
+          appt={appt}
+          onChange={refresh}
+          onLiveSegment={onLiveSegment}
+          onPendingChange={setPendingUploads}
+          realtimeAvailable={realtimeAvailable}
+          onUtterance={onUtterance}
+          onRoles={onRoles}
+          onRealtimeState={setRealtime}
+        />}
+      <TranscriptCard appt={appt} onChange={refresh} pendingUploads={pendingUploads} realtime={realtime} />
       <DocumentsCard appt={appt} templates={templates} onChange={refresh} />
 
       {appt.status === "review" && (

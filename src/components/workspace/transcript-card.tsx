@@ -6,6 +6,7 @@ import type { AppointmentDTO, SegmentDTO } from "@/lib/dto";
 import { LANGUAGE_LABEL } from "@/lib/labels";
 import type { Speaker } from "@/lib/types";
 import { Alert, Badge, Button, Card, Textarea, cx } from "../ui";
+import type { RealtimeLiveState } from "./recording-card";
 
 /* ---------- Реплики «Врач: … / Пациент: …» ---------- */
 
@@ -27,9 +28,16 @@ export function parseDialog(text: string): Line[] {
 
 const serializeDialog = (lines: Line[]) => lines.map((l) => (l.who ? `${LABEL[l.who]}: ${l.text}` : l.text)).join("\n");
 
-function SpeakerChip({ who, onClick, title }: { who: Who; onClick?: () => void; title?: string }) {
-  const cls = who === "doctor" ? "bg-brand-600 text-white" : who === "patient" ? "bg-sky-600 text-white" : "bg-slate-200 text-slate-600";
-  const content = who ? LABEL[who] : "—";
+function SpeakerChip({ who, onClick, title, voice }: { who: Who; onClick?: () => void; title?: string; voice?: string }) {
+  const cls =
+    who === "doctor"
+      ? "bg-brand-600 text-white"
+      : who === "patient"
+        ? "bg-sky-600 text-white"
+        : voice
+          ? "bg-violet-100 text-violet-800"
+          : "bg-slate-200 text-slate-600";
+  const content = who ? LABEL[who] : voice ? `Голос ${voice}` : "—";
   const base = cx("inline-flex h-6 w-[4.75rem] shrink-0 items-center justify-center rounded-md text-xs font-semibold", cls);
   return onClick ? (
     <button type="button" onClick={onClick} title={title} className={cx(base, "cursor-pointer ring-offset-1 hover:ring-2 hover:ring-slate-300")}>
@@ -61,7 +69,17 @@ function DialogView({ lines, onToggle }: { lines: Line[]; onToggle?: (i: number)
 
 /* ---------- Карточка ---------- */
 
-export function TranscriptCard({ appt, onChange, pendingUploads = 0 }: { appt: AppointmentDTO; onChange: () => Promise<void>; pendingUploads?: number }) {
+export function TranscriptCard({
+  appt,
+  onChange,
+  pendingUploads = 0,
+  realtime = null,
+}: {
+  appt: AppointmentDTO;
+  onChange: () => Promise<void>;
+  pendingUploads?: number;
+  realtime?: RealtimeLiveState | null;
+}) {
   const t = appt.transcript;
   const editable = appt.status === "review";
   const live = appt.status === "recording" || appt.status === "processing";
@@ -135,7 +153,7 @@ export function TranscriptCard({ appt, onChange, pendingUploads = 0 }: { appt: A
     >
       <div className="space-y-4">
         {live ? (
-          <LiveDialog segments={appt.segments} pendingUploads={pendingUploads} />
+          <LiveDialog appt={appt} pendingUploads={pendingUploads} realtime={realtime} />
         ) : editable ? (
           <>
             {hasLabels && (
@@ -210,44 +228,84 @@ export function TranscriptCard({ appt, onChange, pendingUploads = 0 }: { appt: A
 }
 
 /** Живой диалог во время записи: реплики появляются по мере распознавания, метки — по мере разметки. */
-function LiveDialog({ segments, pendingUploads }: { segments: SegmentDTO[]; pendingUploads: number }) {
+function LiveDialog({ appt, pendingUploads, realtime }: { appt: AppointmentDTO; pendingUploads: number; realtime: RealtimeLiveState | null }) {
   const boxRef = useRef<HTMLDivElement>(null);
-  const items: ({ kind: "line"; who: Who; text: string; labeled: boolean } | { kind: "note"; text: string; tone: "gray" | "amber" })[] = [];
-  for (const s of segments) {
-    if (s.status === "pending") items.push({ kind: "note", text: `фрагмент №${s.seq + 1} распознаётся…`, tone: "gray" });
-    else if (s.status === "failed") items.push({ kind: "note", text: `фрагмент №${s.seq + 1} не распознан: ${s.error ?? ""} (аудио сохранено)`, tone: "amber" });
+  type LineItem = { kind: "line"; at: number; who: Who; voice?: string; text: string; labeled: boolean };
+  type NoteItem = { kind: "note"; at: number; text: string; tone: "gray" | "amber" };
+  const items: (LineItem | NoteItem)[] = [];
+  const segs = appt.segments.filter((s) => s.textSource !== "realtime");
+  for (const s of segs) {
+    const at = s.startedAt ? Date.parse(s.startedAt) : s.seq;
+    if (s.status === "pending") items.push({ kind: "note", at, text: `фрагмент №${s.seq + 1} распознаётся…`, tone: "gray" });
+    else if (s.status === "failed") items.push({ kind: "note", at, text: `фрагмент №${s.seq + 1} не распознан: ${s.error ?? ""} (аудио сохранено)`, tone: "amber" });
     else if (s.units.length && s.speakers?.length === s.units.length) {
       s.units.forEach((u, i) => {
         const sp = s.speakers![i];
-        const who: Who = sp === "unknown" ? null : sp;
-        const last = items.at(-1);
-        if (last?.kind === "line" && last.labeled && last.who === who && who) last.text += ` ${u}`;
-        else items.push({ kind: "line", who, text: u, labeled: true });
+        items.push({ kind: "line", at: at + i, who: sp === "unknown" ? null : sp, text: u, labeled: true });
       });
-    } else if (s.text) items.push({ kind: "line", who: null, text: s.text, labeled: false });
+    } else if (s.text) items.push({ kind: "line", at, who: null, text: s.text, labeled: false });
   }
-  const count = items.length;
+  for (const u of appt.utterances) {
+    const role = appt.speakerRoles[`${u.sessionId}:${u.speakerId}`];
+    items.push({
+      kind: "line",
+      at: Date.parse(u.startAt),
+      who: role && role !== "unknown" ? role : null,
+      voice: role ? undefined : u.speakerId,
+      text: u.text,
+      labeled: true,
+    });
+  }
+  items.sort((a, b) => a.at - b.at);
+  // Соседние реплики одного говорящего — в одну строку.
+  const merged: (LineItem | NoteItem)[] = [];
+  for (const it of items) {
+    const last = merged.at(-1);
+    if (it.kind === "line" && last?.kind === "line" && last.labeled && it.labeled && last.who === it.who && last.voice === it.voice && (it.who || it.voice))
+      last.text += ` ${it.text}`;
+    else merged.push({ ...it });
+  }
+
+  const live = realtime?.live;
+  const liveRole = live?.speakerId && realtime?.sessionId ? appt.speakerRoles[`${realtime.sessionId}:${live.speakerId}`] : undefined;
+  const count = merged.length;
+  const liveLen = (live?.finalText.length ?? 0) + (live?.partialText.length ?? 0);
   useEffect(() => {
     const el = boxRef.current;
     if (el) el.scrollTop = el.scrollHeight;
-  }, [count, pendingUploads]);
+  }, [count, pendingUploads, liveLen]);
 
-  if (segments.length === 0 && pendingUploads === 0) return <p className="text-sm text-slate-500">Говорите — текст появится после первой фразы…</p>;
+  if (merged.length === 0 && pendingUploads === 0 && !live)
+    return <p className="text-sm text-slate-500">{realtime?.status === "live" ? "Говорите — слова появятся сразу…" : "Говорите — текст появится после первой фразы…"}</p>;
   return (
     <div ref={boxRef} className="max-h-[28rem] space-y-2 overflow-auto rounded-lg bg-slate-50 p-4">
-      {items.map((it, i) =>
+      {merged.map((it, i) =>
         it.kind === "note" ? (
           <p key={i} className={cx("text-xs", it.tone === "amber" ? "text-amber-700" : "text-slate-400")}>
             {it.text}
           </p>
         ) : (
           <div key={i} className="flex items-start gap-3">
-            {it.labeled ? <SpeakerChip who={it.who} /> : <span className="inline-flex h-6 w-[4.75rem] shrink-0 items-center justify-center rounded-md bg-slate-100 text-[11px] text-slate-400">определяется</span>}
+            {it.labeled ? (
+              <SpeakerChip who={it.who} voice={it.voice} />
+            ) : (
+              <span className="inline-flex h-6 w-[4.75rem] shrink-0 items-center justify-center rounded-md bg-slate-100 text-[11px] text-slate-400">определяется</span>
+            )}
             <p className="min-w-0 flex-1 text-sm leading-relaxed">{it.text}</p>
           </div>
         ),
       )}
-      {pendingUploads > 0 && (
+      {live && (live.finalText || live.partialText) && (
+        <div className="flex items-start gap-3">
+          <SpeakerChip who={liveRole && liveRole !== "unknown" ? liveRole : null} voice={liveRole ? undefined : (live.speakerId ?? undefined)} />
+          <p className="min-w-0 flex-1 text-sm leading-relaxed">
+            {live.finalText}
+            <span className="text-slate-400 italic">{live.partialText}</span>
+            <span className="ml-0.5 inline-block h-3.5 w-0.5 animate-pulse bg-brand-500 align-middle" />
+          </p>
+        </div>
+      )}
+      {pendingUploads > 0 && realtime?.status !== "live" && (
         <p className="flex items-center gap-2 text-xs text-slate-400">
           <span className="h-2 w-2 animate-pulse rounded-full bg-brand-500" /> распознаётся…
         </p>
@@ -260,7 +318,7 @@ function SegmentRow({ s, canRetry, onChange }: { s: SegmentDTO; canRetry: boolea
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [play, setPlay] = useState(false);
-  const retryable = s.status === "failed" || s.stale || (s.status === "done" && !s.text);
+  const retryable = s.status === "failed" || s.stale || (s.status === "done" && !s.text && s.textSource !== "realtime");
 
   async function retry() {
     setLoading(true);
@@ -284,7 +342,14 @@ function SegmentRow({ s, canRetry, onChange }: { s: SegmentDTO; canRetry: boolea
           {fmtBytes(s.size)}
         </span>
         {s.source === "upload" && <Badge>файл</Badge>}
-        {s.status === "done" && (s.text ? <Badge tone="green">распознан</Badge> : <Badge>тишина / пусто</Badge>)}
+        {s.status === "done" &&
+          (s.textSource === "realtime" ? (
+            <Badge tone="violet" title="Текст получен потоковым распознаванием Soniox">Soniox</Badge>
+          ) : s.text ? (
+            <Badge tone="green">распознан</Badge>
+          ) : (
+            <Badge>тишина / пусто</Badge>
+          ))}
         {s.status === "failed" && <Badge tone="red" title={s.error ?? ""}>ошибка</Badge>}
         {s.status === "pending" && (s.stale ? <Badge tone="yellow">прервано</Badge> : <Badge tone="blue">обработка</Badge>)}
         <span className="ml-auto flex gap-2">

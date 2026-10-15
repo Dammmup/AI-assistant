@@ -39,7 +39,18 @@ export interface SegmentDTO {
   size: number; // байты
   units: string[];
   speakers: Speaker[] | null;
+  startedAt: string | null;
+  textSource: "whisper" | "realtime";
   stale: boolean;
+}
+
+export interface UtteranceDTO {
+  id: string;
+  clientId: string;
+  sessionId: string;
+  speakerId: string;
+  text: string;
+  startAt: string;
 }
 
 export interface TranscriptDTO {
@@ -95,6 +106,9 @@ export interface AppointmentDTO {
   consent: ConsentDTO | null;
   recording: { id: string; durationSeconds: number; format: string; status: RecordingStatus; segmentsCount: number; totalBytes: number } | null;
   segments: SegmentDTO[];
+  utterances: UtteranceDTO[];
+  /** Роли голосов потокового распознавания: «сессия:голос» → роль. */
+  speakerRoles: Record<string, Speaker>;
   transcript: TranscriptDTO | null;
   documents: DocumentDTO[];
   archivedAt: string | null;

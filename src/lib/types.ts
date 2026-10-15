@@ -42,6 +42,8 @@ export interface AppointmentDoc {
   consentId: ObjectId | null;
   /** Блокировка от параллельной разметки по говорящим. */
   diarizeLockUntil?: Date | null;
+  /** Роли голосов потокового распознавания: ключ «сессия:номер голоса». */
+  speakerRoles?: Record<string, Speaker>;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -89,6 +91,10 @@ export interface SegmentDoc {
   size: number;
   durationSeconds: number;
   status: SegmentStatus;
+  /** Начало фрагмента (время в браузере) — для упорядочивания с потоковыми репликами. */
+  startedAt?: Date | null;
+  /** realtime — текст этого отрезка получен потоковым распознаванием (Soniox), фрагмент хранит только аудио. */
+  textSource?: "whisper" | "realtime";
   text: string;
   /** Предложения распознанного текста — единицы разметки по говорящим. */
   units?: string[];
@@ -182,4 +188,18 @@ export interface ArchiveDoc {
   archivedBy: ObjectId;
   archivedAt: Date;
   archiveStatus: "archived";
+}
+
+/** Реплика потокового распознавания (Soniox): голос определён по звуку, роль — по смыслу. */
+export interface UtteranceDoc {
+  _id: ObjectId;
+  appointmentId: ObjectId;
+  clientId: string; // идемпотентность повторной отправки
+  sessionId: string; // сессия WebSocket — номера голосов действуют в её пределах
+  speakerId: string; // номер голоса от Soniox
+  language: string | null;
+  text: string;
+  startAt: Date;
+  endAt: Date;
+  createdAt: Date;
 }

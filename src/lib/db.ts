@@ -8,6 +8,7 @@ import type {
   PatientDoc,
   RecordingDoc,
   SegmentDoc,
+  UtteranceDoc,
   TranscriptDoc,
   UserDoc,
 } from "./types";
@@ -52,6 +53,7 @@ export async function collections() {
     consents: db.collection<ConsentDoc>("consents"),
     recordings: db.collection<RecordingDoc>("recordings"),
     segments: db.collection<SegmentDoc>("recording_segments"),
+    utterances: db.collection<UtteranceDoc>("utterances"),
     transcripts: db.collection<TranscriptDoc>("transcripts"),
     templates: db.collection<DocumentTemplateDoc>("document_templates"),
     documents: db.collection<MedicalDocumentDoc>("medical_documents"),

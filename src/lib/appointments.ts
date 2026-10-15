@@ -2,9 +2,9 @@ import { ObjectId } from "mongodb";
 import { Readable } from "node:stream";
 import { collections } from "./db";
 import { HttpError } from "./http";
-import { AiError, PROVIDER, labelSpeakers, transcribeAudio } from "./ai";
+import { AiError, PROVIDER, detectSpeakerRoles, labelSpeakers, transcribeAudio } from "./ai";
 import type { SessionUser } from "./auth";
-import type { AppointmentDoc, AppointmentStatus, SegmentDoc, Speaker, TranscriptDoc } from "./types";
+import type { AppointmentDoc, AppointmentStatus, SegmentDoc, Speaker, TranscriptDoc, UtteranceDoc } from "./types";
 
 /** Фрагмент считается «зависшим», если обработка не завершилась за это время (например, оборвалось соединение). */
 const STALE_PENDING_MS = 2 * 60_000;
@@ -85,7 +85,9 @@ export async function ensureRecording(appt: AppointmentDoc) {
 
 export const SPEAKER_PREFIX: Record<Exclude<Speaker, "unknown">, string> = { doctor: "Врач", patient: "Пациент" };
 
-type ComposeSeg = Pick<SegmentDoc, "status" | "text" | "units" | "speakers">;
+type ComposeSeg = Pick<SegmentDoc, "status" | "text" | "units" | "speakers" | "createdAt"> & { startedAt?: Date | null };
+type ComposeUtt = Pick<UtteranceDoc, "sessionId" | "speakerId" | "text" | "startAt">;
+type Item = { at: number; speaker: Speaker | null; text: string };
 
 /** Реплики фрагмента: предложения с говорящими (если разметка есть) либо текст целиком. */
 function segmentLines(s: ComposeSeg): { speaker: Speaker | null; text: string }[] {
@@ -93,16 +95,27 @@ function segmentLines(s: ComposeSeg): { speaker: Speaker | null; text: string }[
   return s.text.trim() ? [{ speaker: null, text: s.text.trim() }] : [];
 }
 
-/** Собирает диалог: соседние реплики одного говорящего объединяются в одну строку «Врач: …». */
-export function composeText(segments: ComposeSeg[]) {
-  const lines: { speaker: Speaker | null; text: string }[] = [];
+export const roleOf = (roles: Record<string, Speaker> | undefined, u: Pick<UtteranceDoc, "sessionId" | "speakerId">): Speaker | null =>
+  roles?.[`${u.sessionId}:${u.speakerId}`] ?? null;
+
+/**
+ * Собирает диалог из фрагментов Whisper и реплик потокового распознавания в порядке времени:
+ * соседние реплики одного говорящего объединяются в одну строку «Врач: …».
+ */
+export function composeText(segments: ComposeSeg[], utterances: ComposeUtt[] = [], roles?: Record<string, Speaker>) {
+  const items: Item[] = [];
   for (const s of segments) {
     if (s.status !== "done") continue;
-    for (const l of segmentLines(s)) {
-      const last = lines.at(-1);
-      if (last && last.speaker === l.speaker && l.speaker !== null) last.text += ` ${l.text}`;
-      else lines.push({ ...l });
-    }
+    const at = (s.startedAt ?? s.createdAt).getTime();
+    segmentLines(s).forEach((l, i) => items.push({ at: at + i, ...l }));
+  }
+  for (const u of utterances) if (u.text.trim()) items.push({ at: u.startAt.getTime(), speaker: roleOf(roles, u), text: u.text.trim() });
+  items.sort((a, b) => a.at - b.at);
+  const lines: { speaker: Speaker | null; text: string }[] = [];
+  for (const l of items) {
+    const last = lines.at(-1);
+    if (last && last.speaker === l.speaker && l.speaker !== null) last.text += ` ${l.text}`;
+    else lines.push({ speaker: l.speaker, text: l.text });
   }
   return lines
     .map((l) => (l.speaker && l.speaker !== "unknown" ? `${SPEAKER_PREFIX[l.speaker]}: ${l.text}` : l.text))
@@ -110,23 +123,28 @@ export function composeText(segments: ComposeSeg[]) {
 }
 
 /** Пересобирает текст транскрипции из распознанных фрагментов, если врач его ещё не редактировал. */
-async function syncTranscript(appointmentId: ObjectId, appendText?: string) {
-  const { transcripts, segments } = await collections();
+export async function syncTranscript(appointmentId: ObjectId, appendText?: string) {
+  const { transcripts, segments, utterances, appointments } = await collections();
   const transcript = await transcripts.findOne({ appointmentId });
   if (!transcript) return;
   const segs = await segments
-    .find({ appointmentId }, { sort: { seq: 1 }, projection: { status: 1, text: 1, units: 1, speakers: 1, updatedAt: 1 } })
+    .find(
+      { appointmentId },
+      { sort: { seq: 1 }, projection: { status: 1, text: 1, units: 1, speakers: 1, updatedAt: 1, createdAt: 1, startedAt: 1 } },
+    )
     .toArray();
+  const utts = await utterances.find({ appointmentId }, { sort: { startAt: 1 } }).toArray();
+  const appt = await appointments.findOne({ _id: appointmentId }, { projection: { speakerRoles: 1 } });
   const now = Date.now();
   const pending = segs.some((s) => s.status === "pending" && now - s.updatedAt.getTime() < STALE_PENDING_MS);
   const failed = segs.some((s) => s.status === "failed" || (s.status === "pending" && now - s.updatedAt.getTime() >= STALE_PENDING_MS));
-  const status: TranscriptDoc["status"] = pending ? "in_progress" : failed ? "partial" : segs.length ? "ready" : transcript.status;
+  const status: TranscriptDoc["status"] = pending ? "in_progress" : failed ? "partial" : segs.length || utts.length ? "ready" : transcript.status;
   if (transcript.isEdited) {
     const update: Partial<TranscriptDoc> = { status, updatedAt: new Date() };
     if (appendText) update.text = `${transcript.text.trimEnd()}\n${appendText}`.trim();
     await transcripts.updateOne({ _id: transcript._id }, { $set: update });
   } else {
-    await transcripts.updateOne({ _id: transcript._id }, { $set: { text: composeText(segs), status, updatedAt: new Date() } });
+    await transcripts.updateOne({ _id: transcript._id }, { $set: { text: composeText(segs, utts, appt?.speakerRoles), status, updatedAt: new Date() } });
   }
 }
 
@@ -141,6 +159,7 @@ export async function finalizeIfReady(appointmentId: ObjectId) {
   const failed = await segments.countDocuments({ appointmentId, status: { $in: ["failed", "pending"] } });
   await recordings.updateOne({ appointmentId }, { $set: { status: failed ? "partial" : "ready", updatedAt: new Date() } });
   await diarizePending(appointmentId, { all: true });
+  await detectRoles(appointmentId, { force: true });
   await syncTranscript(appointmentId);
   await appointments.updateOne({ _id: appointmentId, status: "processing" }, { $set: { status: "review", updatedAt: new Date() } });
 }
@@ -176,6 +195,9 @@ export async function saveSegment(opts: {
   seq?: number;
   /** Тишина по оценке браузера: аудио сохраняется, но не отправляется в распознавание (Whisper «галлюцинирует» на тишине). */
   silent?: boolean;
+  /** false — текст этого отрезка даёт потоковое распознавание, фрагмент только сохраняется. */
+  transcribe?: boolean;
+  startedAt?: Date | null;
 }): Promise<SegmentDoc> {
   const { segments, recordings, audio } = await collections();
   const recording = await ensureRecording(opts.appt);
@@ -219,6 +241,8 @@ export async function saveSegment(opts: {
     size: opts.data.length,
     durationSeconds: Math.max(0, Math.round(opts.durationSeconds * 10) / 10),
     status: "pending",
+    startedAt: opts.startedAt ?? null,
+    textSource: opts.transcribe === false ? "realtime" : "whisper",
     text: "",
     units: [],
     speakers: null,
@@ -243,7 +267,7 @@ export async function saveSegment(opts: {
       $set: { format: opts.mimeType.split(";")[0], updatedAt: now },
     },
   );
-  if (opts.silent) {
+  if (opts.silent || opts.transcribe === false) {
     const { segments: segs } = await collections();
     const done = await segs.findOneAndUpdate(
       { _id: segment._id },
@@ -343,5 +367,36 @@ export async function diarizePending(appointmentId: ObjectId, opts: { all?: bool
     }
   } finally {
     await appointments.updateOne({ _id: appointmentId }, { $set: { diarizeLockUntil: null } });
+  }
+}
+
+/** Сопоставляет голоса потокового распознавания ролям врач/пациент (по первым репликам каждой сессии). */
+export async function detectRoles(appointmentId: ObjectId, opts: { force?: boolean } = {}) {
+  const { appointments, utterances } = await collections();
+  const appt = await appointments.findOne({ _id: appointmentId }, { projection: { speakerRoles: 1 } });
+  if (!appt) return;
+  const roles = appt.speakerRoles ?? {};
+  const utts = await utterances.find({ appointmentId }, { sort: { startAt: 1 } }).toArray();
+  const bySession = new Map<string, UtteranceDoc[]>();
+  for (const u of utts) bySession.set(u.sessionId, [...(bySession.get(u.sessionId) ?? []), u]);
+  let changed = false;
+  for (const [sessionId, list] of bySession) {
+    const unmapped = [...new Set(list.map((u) => u.speakerId))].filter((id) => !roles[`${sessionId}:${id}`]);
+    if (!unmapped.length) continue;
+    // Без принудительного запуска ждём, пока наберётся достаточно реплик для уверенного вывода.
+    if (!opts.force && (list.length < 4 || new Set(list.map((u) => u.speakerId)).size < 2)) continue;
+    try {
+      const detected = await detectSpeakerRoles(list.slice(0, 40).map((u) => ({ speakerId: u.speakerId, text: u.text })));
+      for (const [id, role] of Object.entries(detected)) {
+        if (!roles[`${sessionId}:${id}`]) roles[`${sessionId}:${id}`] = role;
+      }
+      changed = true;
+    } catch (err) {
+      if (!(err instanceof AiError)) console.error(err);
+    }
+  }
+  if (changed) {
+    await appointments.updateOne({ _id: appointmentId }, { $set: { speakerRoles: roles } });
+    await syncTranscript(appointmentId);
   }
 }

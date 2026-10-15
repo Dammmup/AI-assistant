@@ -6,7 +6,15 @@ import type { AppointmentDTO } from "@/lib/dto";
 import { LANGUAGE_LABEL } from "@/lib/labels";
 import { Alert, Button, Card, Select } from "../ui";
 import { Preflight } from "./preflight";
+import { useRealtimeStt, type LiveUtterance, type RealtimeStatus } from "./use-realtime-stt";
 import { useSegmentRecorder, type UploadedSegment } from "./use-segment-recorder";
+import type { Speaker } from "@/lib/types";
+
+export type RealtimeLiveState = {
+  status: RealtimeStatus;
+  live: { speakerId: string | null; finalText: string; partialText: string } | null;
+  sessionId: string | null;
+};
 
 const MAX_UPLOAD = 4 * 1024 * 1024;
 
@@ -15,13 +23,36 @@ export function RecordingCard({
   onChange,
   onLiveSegment,
   onPendingChange,
+  realtimeAvailable,
+  onUtterance,
+  onRoles,
+  onRealtimeState,
 }: {
   appt: AppointmentDTO;
   onChange: () => Promise<void>;
   onLiveSegment: (s: UploadedSegment) => void;
   onPendingChange: (n: number) => void;
+  realtimeAvailable: boolean;
+  onUtterance: (u: LiveUtterance) => void;
+  onRoles: (roles: Record<string, Speaker>) => void;
+  onRealtimeState: (s: RealtimeLiveState) => void;
 }) {
   const rec = useSegmentRecorder({ appointmentId: appt.id, onSegment: onLiveSegment });
+  const sessionIdRef = useRef<string | null>(null);
+  const rt = useRealtimeStt({
+    appointmentId: appt.id,
+    onUtterance: (u) => {
+      sessionIdRef.current = u.sessionId;
+      onUtterance(u);
+    },
+    onRoles,
+    // Потоковое распознавание недоступно — дальше распознаём фрагменты через Whisper (Groq).
+    onFailed: () => rec.setTranscribe(true),
+  });
+  useEffect(
+    () => onRealtimeState({ status: rt.status, live: rt.live, sessionId: sessionIdRef.current }),
+    [rt.status, rt.live, onRealtimeState],
+  );
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<null | "upload" | "manual" | "lang" | "stop">(null);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -38,11 +69,16 @@ export function RecordingCard({
   async function start() {
     setError(null);
     try {
+      rec.setTranscribe(!realtimeAvailable);
       const started = await rec.start(async () => {
         const res = await apiFetch<{ nextSeq: number }>(`/api/appointments/${appt.id}/recording`, { method: "POST", json: { action: "start" } });
         return res.nextSeq;
       });
-      if (started) await onChange();
+      if (started) {
+        await onChange();
+        const stream = rec.getStream();
+        if (realtimeAvailable && stream && !(await rt.start(stream))) rec.setTranscribe(true);
+      }
     } catch (err) {
       setError((err as Error).message);
     }
@@ -52,6 +88,7 @@ export function RecordingCard({
     setError(null);
     setBusy("stop");
     try {
+      if (rt.status === "live" || rt.status === "connecting") await rt.stop();
       if (recordingHere) await rec.stop();
       await apiFetch(`/api/appointments/${appt.id}/recording`, { method: "POST", json: { action: "stop" } });
       await onChange();
@@ -122,7 +159,7 @@ export function RecordingCard({
     >
       <div className="space-y-4">
         {consentOk && appt.status !== "processing" && (
-          <Preflight phase={rec.phase} level={rec.level} queue={rec.queue} segments={appt.segments} />
+          <Preflight phase={rec.phase} level={rec.level} queue={rec.queue} segments={appt.segments} realtimeStatus={realtimeAvailable ? rt.status : null} />
         )}
         {!hasConsentDecision && <Alert tone="yellow">Перед записью зафиксируйте согласие пациента.</Alert>}
 
@@ -173,7 +210,13 @@ export function RecordingCard({
               <span className="h-2 w-28 overflow-hidden rounded-full bg-slate-200" title="Уровень сигнала микрофона">
                 <span className="block h-full bg-emerald-500 transition-[width] duration-100" style={{ width: `${Math.round(rec.level * 100)}%` }} />
               </span>
-              {rec.latency !== null && (
+              {rt.status === "live" && (
+                <span className="rounded-full bg-violet-100 px-2 py-0.5 text-xs font-medium text-violet-800" title="Слова появляются по мере речи (Soniox)">
+                  ⚡ мгновенное распознавание
+                </span>
+              )}
+              {rt.status === "connecting" && <span className="text-xs text-slate-500">подключение к Soniox…</span>}
+              {rt.status !== "live" && rec.latency !== null && (
                 <span className={rec.latency > 5 ? "text-amber-700" : "text-slate-500"} title="Время от конца фразы до появления текста">
                   задержка текста ~{rec.latency.toFixed(1)} с
                 </span>
@@ -188,6 +231,19 @@ export function RecordingCard({
         </div>
 
         {rec.error && <Alert>{rec.error}</Alert>}
+        {rt.status === "failed" && recordingHere && (
+          <Alert tone="yellow">
+            Мгновенное распознавание недоступно ({rt.error}). Запись продолжается, текст распознаётся по фразам через резервный сервис.
+          </Alert>
+        )}
+        {rt.unsent > 0 && !recordingHere && (
+          <Alert tone="yellow">
+            Не сохранено реплик: {rt.unsent}. Не закрывайте страницу.{" "}
+            <button className="font-medium underline" onClick={() => void rt.retrySend()}>
+              Повторить
+            </button>
+          </Alert>
+        )}
         {failed.length > 0 && (
           <Alert tone="yellow">
             Не удалось отправить фрагментов: {failed.length} ({failed[0].error}). Аудио хранится в браузере — не закрывайте страницу.{" "}
@@ -223,8 +279,10 @@ export function RecordingCard({
         {appt.status === "processing" && <Alert tone="blue">Идёт распознавание оставшихся фрагментов…</Alert>}
         {error && <Alert>{error}</Alert>}
         <p className="text-xs text-slate-500">
-          Текст появляется после каждой фразы — запись нарезается по паузам в речи (фрагменты 3–12 с). Реплики автоматически размечаются
-          «Врач» / «Пациент»; разметку можно исправить при проверке. Задержка и качество зависят от сети, микрофона и акустики.
+          {realtimeAvailable
+            ? "Слова появляются по мере речи (Soniox). Голоса разделяются по звуку, роли «Врач» / «Пациент» определяются автоматически и исправляются при проверке. Если Soniox недоступен, запись продолжается с распознаванием по фразам."
+            : "Текст появляется после каждой фразы — запись нарезается по паузам в речи (фрагменты 3–12 с). Реплики автоматически размечаются «Врач» / «Пациент»; разметку можно исправить при проверке."}{" "}
+          Качество зависит от сети, микрофона и акустики.
         </p>
       </div>
     </Card>

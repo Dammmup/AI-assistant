@@ -12,6 +12,8 @@ export async function ensureSetup(db: Db) {
     db.collection("consents").createIndex({ appointmentId: 1 }),
     db.collection("recordings").createIndex({ appointmentId: 1 }, { unique: true }),
     db.collection("recording_segments").createIndex({ recordingId: 1, seq: 1 }, { unique: true }),
+    db.collection("utterances").createIndex({ appointmentId: 1, clientId: 1 }, { unique: true }),
+    db.collection("utterances").createIndex({ appointmentId: 1, startAt: 1 }),
     db.collection("transcripts").createIndex({ appointmentId: 1 }, { unique: true }),
     db.collection("medical_documents").createIndex({ appointmentId: 1 }),
     db.collection("archive").createIndex({ appointmentId: 1 }, { unique: true }),

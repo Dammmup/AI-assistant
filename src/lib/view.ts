@@ -47,7 +47,7 @@ async function userNames(ids: (ObjectId | null | undefined)[]) {
 
 export async function appointmentDTO(appt: AppointmentDoc): Promise<AppointmentDTO> {
   const c = await collections();
-  const [patient, consent, recording, segments, transcript, documents, archived] = await Promise.all([
+  const [patient, consent, recording, segments, transcript, documents, archived, utterances] = await Promise.all([
     c.patients.findOne({ _id: appt.patientId }),
     appt.consentId ? c.consents.findOne({ _id: appt.consentId }) : null,
     c.recordings.findOne({ appointmentId: appt._id }),
@@ -55,6 +55,7 @@ export async function appointmentDTO(appt: AppointmentDoc): Promise<AppointmentD
     c.transcripts.findOne({ appointmentId: appt._id }),
     c.documents.find({ appointmentId: appt._id }, { sort: { createdAt: 1 } }).toArray(),
     c.archive.findOne({ appointmentId: appt._id }),
+    c.utterances.find({ appointmentId: appt._id }, { sort: { startAt: 1 } }).toArray(),
   ]);
   const names = await userNames([
     appt.doctorId,
@@ -111,8 +112,19 @@ export async function appointmentDTO(appt: AppointmentDoc): Promise<AppointmentD
       size: s.size,
       units: s.units ?? [],
       speakers: s.speakers ?? null,
+      startedAt: iso(s.startedAt ?? null),
+      textSource: s.textSource ?? "whisper",
       stale: s.status === "pending" && now - s.updatedAt.getTime() > STALE_MS,
     })),
+    utterances: utterances.map((u) => ({
+      id: u._id.toHexString(),
+      clientId: u.clientId,
+      sessionId: u.sessionId,
+      speakerId: u.speakerId,
+      text: u.text,
+      startAt: u.startAt.toISOString(),
+    })),
+    speakerRoles: appt.speakerRoles ?? {},
     transcript: transcript
       ? {
           id: transcript._id.toHexString(),

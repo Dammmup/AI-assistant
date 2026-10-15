@@ -38,7 +38,10 @@ export const POST = api<Ctx>(async (req, { params }) => {
 
   const data = Buffer.from(await file.arrayBuffer());
   const silent = source === "microphone" && form.get("silent") === "1";
-  const segment = await saveSegment({ appt, data, mimeType, durationSeconds: duration, source, seq: source === "upload" ? undefined : seq, silent });
+  const transcribe = !(source === "microphone" && form.get("transcribe") === "0");
+  const startedAtMs = Number(form.get("startedAt") ?? NaN);
+  const startedAt = Number.isFinite(startedAtMs) ? new Date(startedAtMs) : null;
+  const segment = await saveSegment({ appt, data, mimeType, durationSeconds: duration, source, seq: source === "upload" ? undefined : seq, silent, transcribe, startedAt });
   return ok({
     id: segment._id.toHexString(),
     seq: segment.seq,
@@ -47,6 +50,8 @@ export const POST = api<Ctx>(async (req, { params }) => {
     error: segment.error,
     size: segment.size,
     units: segment.units ?? [],
+    startedAt: segment.startedAt ? segment.startedAt.toISOString() : null,
+    textSource: segment.textSource ?? "whisper",
     speakers: segment.speakers ?? null,
     durationSeconds: segment.durationSeconds,
   });
