@@ -35,6 +35,7 @@ export interface SegmentDTO {
   text: string;
   error: string | null;
   durationSeconds: number;
+  size: number; // байты
   stale: boolean;
 }
 
@@ -89,7 +90,7 @@ export interface AppointmentDTO {
   createdAt: string;
   updatedAt: string;
   consent: ConsentDTO | null;
-  recording: { id: string; durationSeconds: number; format: string; status: RecordingStatus; segmentsCount: number } | null;
+  recording: { id: string; durationSeconds: number; format: string; status: RecordingStatus; segmentsCount: number; totalBytes: number } | null;
   segments: SegmentDTO[];
   transcript: TranscriptDTO | null;
   documents: DocumentDTO[];

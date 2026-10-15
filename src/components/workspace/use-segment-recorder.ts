@@ -8,7 +8,15 @@ const SEGMENT_MS = 15_000;
 const SILENCE_RMS = 0.001;
 const MAX_ATTEMPTS = 4;
 
-export type UploadedSegment = { id: string; seq: number; status: "pending" | "done" | "failed"; text: string; error: string | null };
+export type UploadedSegment = {
+  id: string;
+  seq: number;
+  status: "pending" | "done" | "failed";
+  text: string;
+  error: string | null;
+  size: number;
+  durationSeconds: number;
+};
 
 export type QueueItem = {
   seq: number;

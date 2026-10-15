@@ -97,6 +97,7 @@ export async function appointmentDTO(appt: AppointmentDoc): Promise<AppointmentD
           format: recording.format,
           status: recording.status,
           segmentsCount: recording.segmentsCount,
+          totalBytes: segments.reduce((sum, s) => sum + s.size, 0),
         }
       : null,
     segments: segments.map((s) => ({
@@ -107,6 +108,7 @@ export async function appointmentDTO(appt: AppointmentDoc): Promise<AppointmentD
       text: s.text,
       error: s.error,
       durationSeconds: s.durationSeconds,
+      size: s.size,
       stale: s.status === "pending" && now - s.updatedAt.getTime() > STALE_MS,
     })),
     transcript: transcript

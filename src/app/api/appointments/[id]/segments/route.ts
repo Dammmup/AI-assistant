@@ -45,5 +45,7 @@ export const POST = api<Ctx>(async (req, { params }) => {
     status: segment.status,
     text: segment.text,
     error: segment.error,
+    size: segment.size,
+    durationSeconds: segment.durationSeconds,
   });
 });

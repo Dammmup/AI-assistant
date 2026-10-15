@@ -176,3 +176,56 @@ export function sanitizeFields(fields: TemplateField[], parsed: unknown, transcr
   }
   return out;
 }
+
+export type ProviderCheck = {
+  ok: boolean;
+  latencyMs: number | null;
+  sttModel: string;
+  llmModel: string;
+  sttAvailable: boolean | null;
+  llmAvailable: boolean | null;
+  error: string | null;
+  checkedAt: string;
+};
+
+let lastCheck: { at: number; result: ProviderCheck } | null = null;
+
+/** Проверяет доступность API распознавания/ИИ, ключ и наличие моделей. Результат кэшируется на 60 с. */
+export async function checkProvider(): Promise<ProviderCheck> {
+  if (lastCheck && Date.now() - lastCheck.at < 60_000) return lastCheck.result;
+  const base: ProviderCheck = {
+    ok: false,
+    latencyMs: null,
+    sttModel: STT_MODEL,
+    llmModel: LLM_MODEL,
+    sttAvailable: null,
+    llmAvailable: null,
+    error: null,
+    checkedAt: new Date().toISOString(),
+  };
+  const started = Date.now();
+  let result: ProviderCheck;
+  try {
+    const json = (await call("/models", { method: "GET" }, 8_000)) as { data?: { id: string }[] };
+    const ids = new Set((json.data ?? []).map((m) => m.id));
+    const sttAvailable = ids.size ? ids.has(STT_MODEL) : null;
+    const llmAvailable = ids.size ? ids.has(LLM_MODEL) : null;
+    result = {
+      ...base,
+      latencyMs: Date.now() - started,
+      sttAvailable,
+      llmAvailable,
+      ok: sttAvailable !== false && llmAvailable !== false,
+      error:
+        sttAvailable === false
+          ? `Модель распознавания ${STT_MODEL} недоступна у провайдера`
+          : llmAvailable === false
+            ? `Модель ИИ ${LLM_MODEL} недоступна у провайдера`
+            : null,
+    };
+  } catch (err) {
+    result = { ...base, latencyMs: Date.now() - started, error: err instanceof AiError ? err.message : "Сервис недоступен" };
+  }
+  lastCheck = { at: Date.now(), result };
+  return result;
+}

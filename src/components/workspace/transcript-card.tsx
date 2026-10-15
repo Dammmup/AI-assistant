@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { apiFetch, fmtDateTime, fmtDuration } from "@/lib/client";
+import { apiFetch, fmtBytes, fmtDateTime, fmtDuration } from "@/lib/client";
 import type { AppointmentDTO, SegmentDTO } from "@/lib/dto";
 import { LANGUAGE_LABEL } from "@/lib/labels";
 import { Alert, Badge, Button, Card, Textarea } from "../ui";
@@ -94,7 +94,7 @@ export function TranscriptCard({ appt, onChange }: { appt: AppointmentDTO; onCha
         {appt.segments.length > 0 && !live && (
           <details className="rounded-lg border border-slate-200" open={failedCount > 0 && editable}>
             <summary className="cursor-pointer px-3 py-2 text-sm font-medium text-slate-700">
-              Аудиофрагменты ({appt.segments.length}){failedCount > 0 && <span className="ml-2 text-amber-700">· требуют внимания: {failedCount}</span>}
+              Аудиофрагменты ({appt.segments.length}, {fmtBytes(appt.segments.reduce((sum, s) => sum + s.size, 0))}){failedCount > 0 && <span className="ml-2 text-amber-700">· требуют внимания: {failedCount}</span>}
             </summary>
             <div className="divide-y divide-slate-100 border-t border-slate-200">
               {appt.segments.map((s) => (
@@ -114,6 +114,9 @@ function LiveSegments({ segments }: { segments: SegmentDTO[] }) {
     <div className="max-h-[28rem] space-y-2 overflow-auto rounded-lg bg-slate-50 p-4 text-sm leading-relaxed">
       {segments.map((s) => (
         <p key={s.id} className={s.status === "failed" ? "text-amber-700" : s.status === "pending" ? "text-slate-400" : ""}>
+          <span className="mr-2 text-xs text-slate-400 tabular-nums">
+            №{s.seq + 1} · {fmtDuration(s.durationSeconds)} · {fmtBytes(s.size)}
+          </span>
           {s.status === "done" ? s.text || <span className="text-slate-400">[тишина]</span> : s.status === "pending" ? "распознаётся…" : `[фрагмент ${s.seq + 1} не распознан: ${s.error}]`}
         </p>
       ))}
@@ -145,6 +148,9 @@ function SegmentRow({ s, canRetry, onChange }: { s: SegmentDTO; canRetry: boolea
       <div className="flex flex-wrap items-center gap-2">
         <span className="font-medium text-slate-700">№{s.seq + 1}</span>
         <span className="text-slate-500">{fmtDuration(s.durationSeconds)}</span>
+        <span className="text-slate-500" title={`${s.size.toLocaleString("ru-RU")} байт`}>
+          {fmtBytes(s.size)}
+        </span>
         {s.source === "upload" && <Badge>файл</Badge>}
         {s.status === "done" && (s.text ? <Badge tone="green">распознан</Badge> : <Badge>тишина / пусто</Badge>)}
         {s.status === "failed" && <Badge tone="red" title={s.error ?? ""}>ошибка</Badge>}

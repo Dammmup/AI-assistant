@@ -1,10 +1,11 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { apiFetch, fmtDuration } from "@/lib/client";
+import { apiFetch, fmtBytes, fmtDuration } from "@/lib/client";
 import type { AppointmentDTO } from "@/lib/dto";
 import { LANGUAGE_LABEL } from "@/lib/labels";
 import { Alert, Button, Card, Select } from "../ui";
+import { Preflight } from "./preflight";
 import { useSegmentRecorder, type UploadedSegment } from "./use-segment-recorder";
 
 const MAX_UPLOAD = 4 * 1024 * 1024;
@@ -110,12 +111,16 @@ export function RecordingCard({
       actions={
         appt.recording && !recordingHere ? (
           <span className="text-sm text-slate-500">
-            Записано: {fmtDuration(appt.recording.durationSeconds)} · фрагментов: {appt.recording.segmentsCount}
+            Записано: {fmtDuration(appt.recording.durationSeconds)} · фрагментов: {appt.recording.segmentsCount} ·{" "}
+            {fmtBytes(appt.recording.totalBytes)}
           </span>
         ) : null
       }
     >
       <div className="space-y-4">
+        {consentOk && appt.status !== "processing" && (
+          <Preflight phase={rec.phase} level={rec.level} queue={rec.queue} segments={appt.segments} />
+        )}
         {!hasConsentDecision && <Alert tone="yellow">Перед записью зафиксируйте согласие пациента.</Alert>}
 
         {interrupted && (
@@ -165,7 +170,11 @@ export function RecordingCard({
               <span className="h-2 w-28 overflow-hidden rounded-full bg-slate-200" title="Уровень сигнала микрофона">
                 <span className="block h-full bg-emerald-500 transition-[width] duration-100" style={{ width: `${Math.round(rec.level * 100)}%` }} />
               </span>
-              {inFlight.length > 0 && <span className="text-slate-500">отправка фрагментов: {inFlight.length}</span>}
+              {inFlight.length > 0 && (
+                <span className="text-slate-500">
+                  отправка фрагментов: {inFlight.length} ({fmtBytes(inFlight.reduce((s, q) => s + q.blob.size, 0))})
+                </span>
+              )}
             </div>
           )}
         </div>

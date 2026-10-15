@@ -29,3 +29,6 @@ export const fmtDuration = (sec: number) => {
   const s = Math.round(sec);
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
 };
+
+export const fmtBytes = (bytes: number) =>
+  bytes < 1024 ? `${bytes} Б` : bytes < 1024 * 1024 ? `${(bytes / 1024).toFixed(1)} КБ` : `${(bytes / 1024 / 1024).toFixed(2)} МБ`;

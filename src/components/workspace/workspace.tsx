@@ -38,7 +38,7 @@ export function Workspace({ initial, templates }: { initial: AppointmentDTO; tem
   const onLiveSegment = useCallback((s: UploadedSegment) => {
     setAppt((prev) => {
       const segments = prev.segments.filter((x) => x.id !== s.id);
-      segments.push({ ...s, source: "microphone", durationSeconds: 0, stale: false });
+      segments.push({ ...s, source: "microphone", stale: false });
       segments.sort((a, b) => a.seq - b.seq);
       return { ...prev, segments };
     });
