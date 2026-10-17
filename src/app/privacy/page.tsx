@@ -177,8 +177,8 @@ export default function PrivacyPage() {
 
   return (
     <div className="min-h-screen">
-      <header className="border-b border-line bg-white">
-        <div className="mx-auto flex h-14 max-w-[1080px] items-center justify-between px-6">
+      <header className="border-b border-ink">
+        <div className="mx-auto flex h-16 max-w-[1080px] items-center justify-between px-6">
           <Link href="/">
             <Brand />
           </Link>
@@ -190,7 +190,7 @@ export default function PrivacyPage() {
       <div className="mx-auto grid max-w-[1080px] gap-10 px-6 py-12 lg:grid-cols-[220px_minmax(0,1fr)]">
         <nav className="hidden lg:block">
           <div className="sticky top-8 space-y-1 text-[13px]">
-            <p className="mb-3 text-ink-3">Содержание</p>
+            <p className="kicker mb-3 border-t-2 border-ink pt-3 text-ink-3">Содержание</p>
             {sections.map((s, i) => (
               <a key={s.id} href={`#${s.id}`} className="flex gap-2 py-1 text-ink-2 hover:text-ink">
                 <span className="font-mono text-ink-3 tabular">{String(i + 1).padStart(2, "0")}</span>
@@ -200,12 +200,12 @@ export default function PrivacyPage() {
           </div>
         </nav>
         <article className="max-w-[680px]">
-          <p className="text-[13px] text-ink-3">Редакция от {EDITION}</p>
-          <h1 className="mt-2 text-[32px] leading-tight font-semibold tracking-[-0.025em]">Политика конфиденциальности</h1>
+          <p className="kicker text-ink-3">Редакция от {EDITION}</p>
+          <h1 className="mt-3 font-serif text-[40px] leading-tight font-semibold tracking-[-0.02em]">Политика конфиденциальности</h1>
           <div className="mt-10 space-y-10">
             {sections.map((s, i) => (
               <section key={s.id} id={s.id} className="scroll-mt-8">
-                <h2 className="flex items-baseline gap-3 text-[18px] font-semibold tracking-[-0.01em]">
+                <h2 className="flex items-baseline gap-4 border-t-2 border-ink pt-3 font-serif text-[21px] font-semibold">
                   <span className="font-mono text-sm font-normal text-ink-3 tabular">{String(i + 1).padStart(2, "0")}</span>
                   {s.title}
                 </h2>
@@ -218,7 +218,7 @@ export default function PrivacyPage() {
         </article>
       </div>
       <div className="mx-auto max-w-[1080px] px-6 pb-8">
-        <div className="border-t border-line pt-4">
+        <div className="border-t border-ink pt-4">
           <SiteFooter />
         </div>
       </div>

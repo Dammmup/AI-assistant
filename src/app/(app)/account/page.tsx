@@ -13,7 +13,7 @@ export default async function AccountPage() {
   const tpl = user.role === "doctor" ? await templates.find({ isActive: true }, { projection: { name: 1 } }).sort({ name: 1 }).toArray() : [];
   return (
     <div className="max-w-[820px]">
-      <PageHeader title="Мой профиль" description="Личные данные, настройки работы и безопасность учётной записи" />
+      <PageHeader kicker="Учётная запись" title="Мой профиль" description="Личные данные, настройки работы и безопасность учётной записи" />
       <AccountSettings
         user={{
           fullName: user.fullName,

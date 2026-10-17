@@ -28,7 +28,9 @@ export function RecordingCard({
   onUtterance,
   onRoles,
   onRealtimeState,
+  index,
 }: {
+  index?: string;
   appt: AppointmentDTO;
   onChange: () => Promise<void>;
   onLiveSegment: (s: UploadedSegment) => void;
@@ -148,6 +150,7 @@ export function RecordingCard({
 
   return (
     <Card
+      index={index}
       title="Запись приёма"
       actions={
         appt.recording && !recordingHere ? (
@@ -187,7 +190,7 @@ export function RecordingCard({
           {!recordingHere ? (
             canStart && (
               <Button onClick={start} loading={rec.phase === "starting"}>
-                <span className="h-2 w-2 rounded-full bg-[#e0645a]" />
+                <span className="h-2 w-2 bg-signal" />
                 {appt.status === "recording" ? "Продолжить запись" : appt.status === "review" ? "Дозаписать" : "Начать запись"}
               </Button>
             )
@@ -204,12 +207,12 @@ export function RecordingCard({
 
           {recordingHere && (
             <div className="flex items-center gap-3 text-sm">
-              <span className="flex items-center gap-1.5 font-mono font-medium text-[#a3322a] tabular">
-                <span className="h-2 w-2 animate-pulse rounded-full bg-[#b9443a]" />
+              <span className="flex items-center gap-1.5 font-mono font-medium text-signal tabular">
+                <span className="h-2.5 w-2.5 animate-pulse bg-signal" />
                 {fmtDuration(rec.elapsed)}
               </span>
-              <span className="h-1.5 w-28 overflow-hidden rounded-full bg-line" title="Уровень сигнала микрофона">
-                <span className="block h-full bg-[#3b8a5c] transition-[width] duration-100" style={{ width: `${Math.round(rec.level * 100)}%` }} />
+              <span className="h-2 w-32 overflow-hidden border border-line-2 bg-sheet" title="Уровень сигнала микрофона">
+                <span className="block h-full bg-ink transition-[width] duration-100" style={{ width: `${Math.round(rec.level * 100)}%` }} />
               </span>
               {rt.status === "live" && (
                 <Badge tone="violet" title="Слова появляются по мере речи (Soniox)">

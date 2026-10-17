@@ -10,7 +10,7 @@ export default async function TemplatesPage() {
   const list = await templates.find().sort({ createdAt: 1 }).toArray();
   return (
     <div className="space-y-4">
-      <PageHeader title="Шаблоны документов" description="Поля шаблона и инструкции, по которым ИИ заполняет документ" />
+      <PageHeader kicker="Администрирование" title="Шаблоны документов" description="Поля шаблона и инструкции, по которым ИИ заполняет документ" />
       <TemplatesManager templates={list.map(templateDTO)} />
     </div>
   );

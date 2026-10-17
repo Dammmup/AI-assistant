@@ -79,22 +79,22 @@ export function NewAppointmentForm({ defaultLanguage = "ru" }: { defaultLanguage
   }
 
   return (
-    <form onSubmit={submit} className="space-y-4" noValidate>
-      <Card title="Пациент">
-        <div className="mb-5 inline-flex rounded-[5px] border border-line-2 p-0.5 text-[13px]">
+    <form onSubmit={submit} className="space-y-10" noValidate>
+      <Card index="01" title="Пациент">
+        <div className="mb-7 inline-flex border border-ink text-[13px]">
           {(["new", "existing"] as const).map((m) => (
             <button
               type="button"
               key={m}
               onClick={() => setMode(m)}
-              className={`rounded-[4px] px-3 py-1.5 ${mode === m ? "bg-ink font-medium text-white" : "text-ink-2 hover:text-ink"}`}
+              className={`px-4 py-2 ${mode === m ? "bg-ink font-medium text-sheet" : "text-ink-2 hover:text-ink"}`}
             >
               {m === "new" ? "Новый пациент" : "Из моих пациентов"}
             </button>
           ))}
         </div>
         {mode === "new" ? (
-          <div className="grid gap-4 sm:grid-cols-2">
+          <div className="grid gap-x-8 gap-y-6 sm:grid-cols-2">
             <div className="sm:col-span-2">
               <Label htmlFor="fn" hint="отчество — при наличии">
                 ФИО пациента *
@@ -144,14 +144,14 @@ export function NewAppointmentForm({ defaultLanguage = "ru" }: { defaultLanguage
         ) : (
           <div className="space-y-3">
             <Input placeholder="Поиск по ФИО" value={query} onChange={(e) => setQuery(e.target.value)} autoFocus />
-            <div className="max-h-64 divide-y divide-line overflow-auto rounded-[5px] border border-line">
+            <div className="max-h-64 divide-y divide-line overflow-auto border border-line-2 bg-sheet">
               {results.length === 0 && <p className="p-3 text-sm text-ink-3">Пациенты не найдены</p>}
               {results.map((p) => (
                 <button
                   type="button"
                   key={p.id}
                   onClick={() => setSelected(p)}
-                  className={`block w-full px-3 py-2.5 text-left text-sm hover:bg-paper ${selected?.id === p.id ? "bg-brand-50 shadow-[inset_2px_0_0_var(--color-brand-600)]" : ""}`}
+                  className={`block w-full px-4 py-3 text-left text-sm hover:bg-paper ${selected?.id === p.id ? "bg-paper shadow-[inset_3px_0_0_var(--color-signal)]" : ""}`}
                 >
                   <span className="font-medium">{p.fullName}</span>
                   <span className="ml-2 text-ink-3">
@@ -163,8 +163,8 @@ export function NewAppointmentForm({ defaultLanguage = "ru" }: { defaultLanguage
           </div>
         )}
       </Card>
-      <Card title="Параметры приёма">
-        <div className="grid gap-4 sm:grid-cols-2">
+      <Card index="02" title="Параметры приёма">
+        <div className="grid gap-x-8 gap-y-6 sm:grid-cols-2">
           <div className="sm:col-span-2">
             <Label htmlFor="reason">Повод обращения</Label>
             <Textarea id="reason" rows={2} value={reason} onChange={(e) => setReason(e.target.value)} placeholder="необязательно" />

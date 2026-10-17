@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { apiFetch, fmtDate, fmtDateTime } from "@/lib/client";
+import { ageOn, formatAge } from "@/lib/patient-validation";
 import type { AppointmentDTO, SegmentDTO, TemplateDTO } from "@/lib/dto";
 import { AppointmentStatusBadge } from "../status";
 import { Alert, Badge, Button } from "../ui";
@@ -138,33 +139,52 @@ export function Workspace({
       <Badge tone="yellow">Не зафиксировано</Badge>
     );
 
+  // Нумерация разделов бланка
+  const showConsent = !appt.consent || (appt.status === "draft" && appt.consent.status !== "obtained");
+  const showRecording = !!appt.consent && ["draft", "recording", "processing", "review"].includes(appt.status);
+  const showTranscript = !!appt.transcript || appt.segments.length > 0;
+  const showDocs = ["review", "completed", "archived"].includes(appt.status);
+  let n = 0;
+  const num = (show: boolean) => (show ? String(++n).padStart(2, "0") : undefined);
+  const idx = { consent: num(showConsent), recording: num(showRecording), transcript: num(showTranscript), docs: num(showDocs) };
+  const age = appt.patient.dateOfBirth ? formatAge(ageOn(appt.patient.dateOfBirth)) : null;
+
   return (
     <div>
-      <div className="mb-6 border-b border-line pb-4">
-        <Link
-          href={appt.status === "archived" ? "/archive" : "/appointments"}
-          className="inline-flex items-center gap-1 text-[13px] text-ink-3 hover:text-ink"
-        >
-          <ChevronLeft className="h-4 w-4" /> {appt.status === "archived" ? "Архив" : "Приёмы"}
-        </Link>
-        <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-2">
-          <h1 className="text-[22px] font-semibold tracking-[-0.02em]">{appt.patient.fullName}</h1>
+      <div className="mb-10 border-b border-ink pb-6">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <Link href={appt.status === "archived" ? "/archive" : "/appointments"} className="kicker inline-flex items-center gap-1 text-ink-3 hover:text-ink">
+            <ChevronLeft className="h-3.5 w-3.5" /> {appt.status === "archived" ? "Архив" : "Приёмы"}
+          </Link>
+          <span className="kicker text-ink-3">
+            Приём № {appt.id.slice(-6).toUpperCase()} · {fmtDateTime(appt.createdAt)}
+          </span>
+        </div>
+        <h1 className="mt-5 font-serif text-[40px] leading-[1.05] font-semibold tracking-[-0.02em]">{appt.patient.fullName}</h1>
+        <div className="mt-3 flex flex-wrap items-center gap-x-5 gap-y-2 text-[14px] text-ink-2">
+          {appt.patient.dateOfBirth && (
+            <span>
+              {fmtDate(appt.patient.dateOfBirth)} <span className="text-ink-3">({age})</span>
+            </span>
+          )}
+          {appt.patient.externalPatientId && <span className="font-mono text-[13px]">ID {appt.patient.externalPatientId}</span>}
+          {appt.reason && <span>{appt.reason}</span>}
           <AppointmentStatusBadge status={appt.status} />
         </div>
-        {appt.reason && <p className="mt-1 text-sm text-ink-2">{appt.reason}</p>}
       </div>
 
       {error && (
-        <div className="mb-4">
+        <div className="mb-6">
           <Alert>{error}</Alert>
         </div>
       )}
 
-      <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_280px]">
-        <div className="min-w-0 space-y-5">
-          {(!appt.consent || (appt.status === "draft" && appt.consent.status !== "obtained")) && <ConsentCard appt={appt} onChange={refresh} />}
-          {appt.consent && (
+      <div className="grid items-start gap-x-12 gap-y-10 lg:grid-cols-[minmax(0,1fr)_260px]">
+        <div className="min-w-0 space-y-12">
+          {showConsent && <ConsentCard appt={appt} onChange={refresh} index={idx.consent} />}
+          {showRecording && (
             <RecordingCard
+              index={idx.recording}
               appt={appt}
               onChange={refresh}
               onLiveSegment={onLiveSegment}
@@ -175,56 +195,53 @@ export function Workspace({
               onRealtimeState={setRealtime}
             />
           )}
-          <TranscriptCard appt={appt} onChange={refresh} pendingUploads={pendingUploads} realtime={realtime} />
-          <DocumentsCard appt={appt} templates={templates} defaultTemplateId={defaultTemplateId} onChange={refresh} />
+          <TranscriptCard appt={appt} onChange={refresh} pendingUploads={pendingUploads} realtime={realtime} index={idx.transcript} />
+          <DocumentsCard appt={appt} templates={templates} defaultTemplateId={defaultTemplateId} onChange={refresh} index={idx.docs} />
         </div>
 
-        <aside className="space-y-4 lg:sticky lg:top-6">
-          <div className="rounded-md border border-line bg-white">
-            <dl className="divide-y divide-line text-[13px]">
+        <aside className="space-y-8 lg:sticky lg:top-24">
+          <section className="border-t-2 border-ink">
+            <p className="kicker pt-3 pb-2 text-ink-3">Сведения</p>
+            <dl className="text-[14px]">
               {[
-                ["Дата рождения", appt.patient.dateOfBirth ? fmtDate(appt.patient.dateOfBirth) : null],
-                ["ID пациента", appt.patient.externalPatientId],
                 ["Врач", appt.doctorName],
-                ["Создан", fmtDateTime(appt.createdAt)],
                 ["Начало", appt.startedAt ? fmtDateTime(appt.startedAt) : null],
                 ["Окончание", appt.endedAt ? fmtDateTime(appt.endedAt) : null],
               ]
                 .filter(([, v]) => v)
                 .map(([k, v]) => (
-                  <div key={k} className="flex justify-between gap-3 px-4 py-2">
-                    <dt className="text-ink-3">{k}</dt>
-                    <dd className="text-right text-ink">{v}</dd>
+                  <div key={k} className="border-b border-line py-2">
+                    <dt className="kicker text-ink-3">{k}</dt>
+                    <dd className="mt-0.5 text-ink">{v}</dd>
                   </div>
                 ))}
-              <div className="flex items-center justify-between gap-3 px-4 py-2">
-                <dt className="text-ink-3">Согласие</dt>
-                <dd>{consentLabel}</dd>
+              <div className="border-b border-line py-2">
+                <dt className="kicker text-ink-3">Согласие</dt>
+                <dd className="mt-1">{consentLabel}</dd>
               </div>
             </dl>
-          </div>
+          </section>
 
-          <div className="rounded-md border border-line bg-white px-4 py-4">
-            <p className="mb-3 text-[13px] font-medium text-ink">Ход приёма</p>
+          <section className="border-t-2 border-ink">
+            <p className="kicker pt-3 pb-3 text-ink-3">Ход приёма</p>
             <Stepper appt={appt} />
-          </div>
+          </section>
 
           {appt.status === "review" && (
-            <div className="rounded-md border border-line bg-white px-4 py-4">
-              <p className="text-[13px] font-medium">Завершение</p>
-              <p className="mt-1 text-[13px] leading-relaxed text-ink-3">
+            <section className="border-t-2 border-ink pt-3">
+              <p className="kicker text-ink-3">Завершение</p>
+              <p className="mt-2 text-[13px] leading-relaxed text-ink-2">
                 {allApproved ? "Все документы подтверждены — приём можно завершить." : "Сформируйте документы и подтвердите каждый из них."}
               </p>
-              <Button className="mt-3 w-full" onClick={() => changeStatus("complete")} disabled={!allApproved} loading={busy === "complete"}>
-                Сохранить и завершить приём
+              <Button className="mt-4 w-full" onClick={() => changeStatus("complete")} disabled={!allApproved} loading={busy === "complete"}>
+                Завершить приём
               </Button>
-            </div>
+            </section>
           )}
           {appt.status === "completed" && (
-            <div className="rounded-md border border-line bg-white px-4 py-4">
-              <p className="text-[13px] font-medium">Приём завершён</p>
-              <p className="mt-1 text-[13px] text-ink-3">Переведите его в архив или верните на проверку.</p>
-              <div className="mt-3 flex flex-col gap-2">
+            <section className="border-t-2 border-ink pt-3">
+              <p className="kicker text-ink-3">Приём завершён</p>
+              <div className="mt-4 flex flex-col gap-2">
                 <Button onClick={() => changeStatus("archive")} loading={busy === "archive"}>
                   Перевести в архив
                 </Button>
@@ -232,9 +249,14 @@ export function Workspace({
                   Вернуть на проверку
                 </Button>
               </div>
-            </div>
+            </section>
           )}
-          {appt.status === "archived" && <Alert tone="blue">В архиве с {fmtDateTime(appt.archivedAt)}. Только просмотр.</Alert>}
+          {appt.status === "archived" && (
+            <section className="border-t-2 border-ink pt-3">
+              <p className="kicker text-ink-3">В архиве с {fmtDateTime(appt.archivedAt)}</p>
+              <p className="mt-1 text-[13px] text-ink-3">Только просмотр.</p>
+            </section>
+          )}
         </aside>
       </div>
     </div>

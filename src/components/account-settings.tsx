@@ -26,9 +26,9 @@ type Props = {
 /** Блок настроек: описание слева, форма справа. */
 function Row({ title, description, children }: { title: string; description: string; children: React.ReactNode }) {
   return (
-    <section className="grid gap-x-10 gap-y-4 border-b border-line py-8 first:pt-2 last:border-b-0 md:grid-cols-[240px_minmax(0,1fr)]">
+    <section className="grid gap-x-12 gap-y-5 border-t-2 border-ink py-6 md:grid-cols-[220px_minmax(0,1fr)]">
       <div>
-        <h2 className="text-[15px] font-semibold tracking-[-0.01em]">{title}</h2>
+        <h2 className="text-[13px] font-semibold tracking-[0.08em] uppercase">{title}</h2>
         <p className="mt-1 text-[13px] leading-relaxed text-ink-3">{description}</p>
       </div>
       <div className="min-w-0">{children}</div>
@@ -55,7 +55,7 @@ function useAction() {
 
 const Saved = ({ show, text = "Сохранено" }: { show: boolean; text?: string }) =>
   show ? (
-    <span className="inline-flex items-center gap-1 text-[13px] text-[#22573a]">
+    <span className="kicker inline-flex items-center gap-1 text-ok">
       <Check className="h-4 w-4" /> {text}
     </span>
   ) : null;
@@ -68,7 +68,7 @@ function PasswordInput(props: React.InputHTMLAttributes<HTMLInputElement>) {
       <button
         type="button"
         onClick={() => setShow(!show)}
-        className="absolute top-0 right-0 flex h-9 w-9 items-center justify-center text-ink-3 hover:text-ink"
+        className="absolute top-0 right-0 flex h-10 w-8 items-center justify-end text-ink-3 hover:text-ink"
         aria-label={show ? "Скрыть пароль" : "Показать пароль"}
       >
         {show ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
@@ -148,13 +148,13 @@ export function AccountSettings({ user, templates }: Props) {
   const sessionsAction = useAction();
 
   return (
-    <div>
+    <div className="space-y-4">
       <Row title="Профиль" description="Как вас видят коллеги. ФИО и должность печатаются в подписи медицинских документов.">
-        <form onSubmit={saveProfile} className="space-y-5">
+        <form onSubmit={saveProfile} className="space-y-6">
           <div className="flex items-center gap-4">
             <Avatar name={profile.fullName || user.fullName} color={profile.avatarColor} size="lg" />
             <div>
-              <p className="mb-2 text-[13px] text-ink-3">Цвет аватара</p>
+              <p className="kicker mb-2 text-ink-3">Цвет метки</p>
               <div className="flex flex-wrap gap-1.5">
                 {AVATAR_COLORS.map((c) => (
                   <button
@@ -162,7 +162,7 @@ export function AccountSettings({ user, templates }: Props) {
                     key={c}
                     onClick={() => setProfile({ ...profile, avatarColor: c })}
                     className={cx(
-                      "h-6 w-6 rounded-full ring-offset-2 transition",
+                      "h-7 w-7 ring-offset-2 ring-offset-paper transition",
                       profile.avatarColor === c ? "ring-2 ring-ink" : "hover:ring-2 hover:ring-line-2",
                     )}
                     style={{ background: c }}
@@ -172,7 +172,7 @@ export function AccountSettings({ user, templates }: Props) {
               </div>
             </div>
           </div>
-          <div className="grid gap-4 sm:grid-cols-2">
+          <div className="grid gap-x-8 gap-y-6 sm:grid-cols-2">
             <div className="sm:col-span-2">
               <Label htmlFor="fullName">ФИО</Label>
               <Input id="fullName" value={profile.fullName} onChange={(e) => setProfile({ ...profile, fullName: e.target.value })} required minLength={3} />
@@ -241,7 +241,7 @@ export function AccountSettings({ user, templates }: Props) {
 
       <Row title="Логин" description="Используется для входа. Для смены подтвердите действие текущим паролем.">
         <form onSubmit={saveEmail} className="space-y-4">
-          <div className="grid gap-4 sm:grid-cols-2">
+          <div className="grid gap-x-8 gap-y-6 sm:grid-cols-2">
             <div>
               <Label htmlFor="email">Новый логин</Label>
               <Input id="email" value={email.value} onChange={(e) => setEmail({ ...email, value: e.target.value })} autoComplete="username" required />
@@ -278,7 +278,7 @@ export function AccountSettings({ user, templates }: Props) {
             <Label htmlFor="pw-cur">Текущий пароль</Label>
             <PasswordInput id="pw-cur" value={pw.current} onChange={(e) => setPw({ ...pw, current: e.target.value })} autoComplete="current-password" required />
           </div>
-          <div className="grid gap-4 sm:grid-cols-2">
+          <div className="grid gap-x-8 gap-y-6 sm:grid-cols-2">
             <div>
               <Label htmlFor="pw-new">Новый пароль</Label>
               <PasswordInput id="pw-new" value={pw.next} onChange={(e) => setPw({ ...pw, next: e.target.value })} autoComplete="new-password" required minLength={8} />
@@ -289,8 +289,8 @@ export function AccountSettings({ user, templates }: Props) {
                       <span
                         key={i}
                         className={cx(
-                          "h-1 flex-1 rounded-full",
-                          i < strength ? (strength <= 1 ? "bg-[#b9443a]" : strength === 2 ? "bg-[#c48a1d]" : "bg-[#3b8a5c]") : "bg-line",
+                          "h-1.5 flex-1",
+                          i < strength ? (strength <= 1 ? "bg-signal" : strength === 2 ? "bg-[#c48a1d]" : "bg-ok") : "bg-line",
                         )}
                       />
                     ))}

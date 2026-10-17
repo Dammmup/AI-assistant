@@ -9,7 +9,7 @@ export default async function UsersPage() {
   const list = await users.find({}, { projection: { passwordHash: 0 } }).sort({ createdAt: 1 }).toArray();
   return (
     <div className="space-y-4">
-      <PageHeader title="Пользователи" description="Учётные записи врачей и администраторов" />
+      <PageHeader kicker="Администрирование" title="Пользователи" description="Учётные записи врачей и администраторов" />
       <UsersManager
         meId={me._id.toHexString()}
         users={list.map((u) => ({

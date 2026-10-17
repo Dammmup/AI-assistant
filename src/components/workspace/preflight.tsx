@@ -10,30 +10,25 @@ import type { RealtimeStatus } from "./use-realtime-stt";
 type Light = "green" | "yellow" | "red" | "gray";
 
 const DOT: Record<Light, string> = {
-  green: "bg-[#3b8a5c]",
+  green: "bg-ok",
   yellow: "bg-[#c48a1d]",
-  red: "bg-[#b9443a]",
-  gray: "bg-line-2",
+  red: "bg-signal",
+  gray: "border border-line-2 bg-transparent",
 };
-const BOX: Record<Light, string> = {
-  green: "border-line bg-white",
-  yellow: "border-[#ead9b0] bg-[#fdf9f0]",
-  red: "border-[#e8c5c0] bg-[#fdf5f4]",
-  gray: "border-line bg-white",
-};
+const TEXT: Record<Light, string> = { green: "text-ink", yellow: "text-warn", red: "text-signal", gray: "text-ink-3" };
 
 function Indicator({ title, light, status, detail, action }: { title: string; light: Light; status: string; detail?: string; action?: React.ReactNode }) {
   return (
-    <div className={cx("flex min-w-0 flex-1 items-start gap-3 rounded-md border px-3 py-2.5", BOX[light])}>
-      <span className={cx("mt-1 h-3 w-3 shrink-0 rounded-full", DOT[light], light !== "gray" && "shadow-[0_0_0_3px_rgba(0,0,0,0.04)]")} />
-      <div className="min-w-0 flex-1">
-        <div className="flex items-center justify-between gap-2">
-          <span className="text-[12px] text-ink-3">{title}</span>
-          {action}
-        </div>
-        <div className="text-sm font-medium text-ink">{status}</div>
-        {detail && <div className="text-xs text-ink-2">{detail}</div>}
+    <div className="min-w-0 px-4 py-3">
+      <div className="flex items-center justify-between gap-2">
+        <span className="kicker text-ink-3">{title}</span>
+        {action}
       </div>
+      <div className={cx("mt-1.5 flex items-center gap-2 text-[14px] font-medium", TEXT[light])}>
+        <span className={cx("h-2.5 w-2.5 shrink-0", DOT[light])} />
+        {status}
+      </div>
+      {detail && <div className="mt-1 font-mono text-[11px] leading-snug text-ink-3">{detail}</div>}
     </div>
   );
 }
@@ -373,10 +368,10 @@ export function Preflight({
   return (
     <div className="space-y-2">
       <div className="flex items-center gap-2 text-sm">
-        <span className={cx("h-2.5 w-2.5 rounded-full", DOT[overall])} />
-        <span className="font-medium text-ink">{summary}</span>
+        <span className={cx("h-2.5 w-2.5", DOT[overall])} />
+        <span className="kicker text-ink">{summary}</span>
       </div>
-      <div className="flex flex-col gap-2 md:flex-row">
+      <div className="grid divide-y divide-line border border-line-2 bg-sheet md:grid-cols-3 md:divide-x md:divide-y-0">
         <Indicator
           title="Микрофон"
           light={micLight}

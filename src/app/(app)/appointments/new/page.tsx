@@ -9,7 +9,7 @@ export default async function NewAppointmentPage() {
   const user = await requirePageUser("doctor");
   return (
     <div className="max-w-[720px]">
-      <PageHeader title="Новый приём" description="Укажите пациента. Запись и согласие — на следующем шаге." />
+      <PageHeader kicker="Журнал" title="Новый приём" description="Укажите пациента. Запись и согласие — на следующем шаге." />
       <NewAppointmentForm defaultLanguage={user.preferences?.defaultLanguage ?? "ru"} />
     </div>
   );

@@ -29,19 +29,15 @@ export function parseDialog(text: string): Line[] {
 
 const serializeDialog = (lines: Line[]) => lines.map((l) => (l.who ? `${LABEL[l.who]}: ${l.text}` : l.text)).join("\n");
 
+/** Метка говорящего в протоколе: роль капителью в левой колонке. */
 function SpeakerChip({ who, onClick, title, voice }: { who: Who; onClick?: () => void; title?: string; voice?: string }) {
-  const cls =
-    who === "doctor"
-      ? "bg-brand-600 text-white"
-      : who === "patient"
-        ? "bg-[#e7eef5] text-brand-700 ring-1 ring-inset ring-brand-200"
-        : voice
-          ? "bg-[#eeeaf4] text-[#4f3b78]"
-          : "bg-line text-ink-2";
   const content = who ? LABEL[who] : voice ? `Голос ${voice}` : "—";
-  const base = cx("inline-flex h-6 w-[4.75rem] shrink-0 items-center justify-center rounded-[4px] text-xs font-semibold", cls);
+  const base = cx(
+    "kicker inline-block w-[92px] shrink-0 pt-[3px] text-left",
+    who === "doctor" ? "font-medium text-ink" : who === "patient" ? "text-signal" : "text-ink-3",
+  );
   return onClick ? (
-    <button type="button" onClick={onClick} title={title} className={cx(base, "cursor-pointer ring-offset-1 hover:ring-2 hover:ring-line-2")}>
+    <button type="button" onClick={onClick} title={title} className={cx(base, "cursor-pointer underline decoration-dotted underline-offset-4 hover:decoration-solid")}>
       {content}
     </button>
   ) : (
@@ -53,15 +49,15 @@ function SpeakerChip({ who, onClick, title, voice }: { who: Who; onClick?: () =>
 
 function DialogView({ lines, onToggle }: { lines: Line[]; onToggle?: (i: number) => void }) {
   return (
-    <div className="space-y-2">
+    <div>
       {lines.map((l, i) => (
-        <div key={i} className="flex items-start gap-3">
+        <div key={i} className="flex items-start gap-4 border-b border-line py-2 last:border-b-0">
           <SpeakerChip
             who={l.who}
             onClick={onToggle ? () => onToggle(i) : undefined}
             title={onToggle ? "Нажмите, чтобы сменить говорящего: Врач → Пациент → без метки" : undefined}
           />
-          <p className={cx("min-w-0 flex-1 text-sm leading-relaxed", l.who === "patient" && "text-ink")}>{l.text}</p>
+          <p className="min-w-0 flex-1 font-serif text-[16px] leading-[1.55] text-ink">{l.text}</p>
         </div>
       ))}
     </div>
@@ -75,7 +71,9 @@ export function TranscriptCard({
   onChange,
   pendingUploads = 0,
   realtime = null,
+  index,
 }: {
+  index?: string;
   appt: AppointmentDTO;
   onChange: () => Promise<void>;
   pendingUploads?: number;
@@ -140,7 +138,8 @@ export function TranscriptCard({
 
   return (
     <Card
-      title="Транскрипция"
+      index={index}
+      title="Расшифровка"
       actions={
         t && (
           <>
@@ -159,13 +158,13 @@ export function TranscriptCard({
           <>
             {hasLabels && (
               <div className="flex flex-wrap items-center justify-between gap-2">
-                <div className="inline-flex rounded-[5px] border border-line-2 p-0.5 text-[13px]">
+                <div className="inline-flex border border-ink text-[13px]">
                   {(["dialog", "text"] as const).map((m) => (
                     <button
                       type="button"
                       key={m}
                       onClick={() => setMode(m)}
-                      className={`rounded-[4px] px-3 py-1 ${mode === m ? "bg-ink font-medium text-white" : "text-ink-2 hover:text-ink"}`}
+                      className={`px-3 py-1.5 ${mode === m ? "bg-ink font-medium text-sheet" : "text-ink-2 hover:text-ink"}`}
                     >
                       {m === "dialog" ? "Диалог" : "Редактировать текст"}
                     </button>
@@ -179,7 +178,7 @@ export function TranscriptCard({
               </div>
             )}
             {showDialog ? (
-              <div className="max-h-[36rem] overflow-auto rounded-md border border-line p-4">
+              <div className="max-h-[36rem] overflow-auto border border-line-2 bg-sheet px-5 py-2">
                 <DialogView lines={lines} onToggle={toggleSpeaker} />
                 <p className="mt-3 text-xs text-ink-3">
                   Роли определены автоматически по смыслу реплик и могут ошибаться. Нажмите на метку, чтобы исправить; текст правится во вкладке
@@ -204,16 +203,16 @@ export function TranscriptCard({
             {error && <Alert>{error}</Alert>}
           </>
         ) : hasLabels ? (
-          <div className="max-h-[32rem] overflow-auto rounded-md bg-paper p-4">
+          <div className="max-h-[32rem] overflow-auto border border-line-2 bg-sheet px-5 py-2">
             <DialogView lines={lines} />
           </div>
         ) : (
-          <div className="max-h-[32rem] overflow-auto rounded-md bg-paper p-4 text-sm leading-relaxed whitespace-pre-wrap">{t?.text || "—"}</div>
+          <div className="max-h-[32rem] overflow-auto border border-line-2 bg-sheet px-5 py-4 font-serif text-[16px] leading-[1.6] whitespace-pre-wrap">{t?.text || "—"}</div>
         )}
 
         {appt.segments.length > 0 && !live && (
-          <details className="rounded-md border border-line" open={failedCount > 0 && editable}>
-            <summary className="cursor-pointer px-3 py-2 text-sm font-medium text-ink-2">
+          <details className="border-t border-line" open={failedCount > 0 && editable}>
+            <summary className="kicker cursor-pointer py-3 text-ink-2 hover:text-ink">
               Аудиофрагменты ({appt.segments.length}, {fmtBytes(appt.segments.reduce((sum, s) => sum + s.size, 0))}){failedCount > 0 && <span className="ml-2 text-[#7a5410]">· требуют внимания: {failedCount}</span>}
             </summary>
             <div className="divide-y divide-line border-t border-line">
@@ -279,36 +278,36 @@ function LiveDialog({ appt, pendingUploads, realtime }: { appt: AppointmentDTO; 
   if (merged.length === 0 && pendingUploads === 0 && !live)
     return <p className="text-sm text-ink-3">{realtime?.status === "live" ? "Говорите — слова появятся сразу…" : "Говорите — текст появится после первой фразы…"}</p>;
   return (
-    <div ref={boxRef} className="max-h-[28rem] space-y-2 overflow-auto rounded-md bg-paper p-4">
+    <div ref={boxRef} className="max-h-[30rem] overflow-auto border border-line-2 bg-sheet px-5 py-2">
       {merged.map((it, i) =>
         it.kind === "note" ? (
           <p key={i} className={cx("text-xs", it.tone === "amber" ? "text-[#7a5410]" : "text-ink-3")}>
             {it.text}
           </p>
         ) : (
-          <div key={i} className="flex items-start gap-3">
+          <div key={i} className="flex items-start gap-4 border-b border-line py-2 last:border-b-0">
             {it.labeled ? (
               <SpeakerChip who={it.who} voice={it.voice} />
             ) : (
-              <span className="inline-flex h-6 w-[4.75rem] shrink-0 items-center justify-center rounded-md bg-[#efede7] text-[11px] text-ink-3">определяется</span>
+              <span className="kicker inline-block w-[92px] shrink-0 pt-[3px] text-ink-3">…</span>
             )}
-            <p className="min-w-0 flex-1 text-sm leading-relaxed">{it.text}</p>
+            <p className="min-w-0 flex-1 font-serif text-[16px] leading-[1.55]">{it.text}</p>
           </div>
         ),
       )}
       {live && (live.finalText || live.partialText) && (
-        <div className="flex items-start gap-3">
+        <div className="flex items-start gap-4 py-2">
           <SpeakerChip who={liveRole && liveRole !== "unknown" ? liveRole : null} voice={liveRole ? undefined : (live.speakerId ?? undefined)} />
-          <p className="min-w-0 flex-1 text-sm leading-relaxed">
+          <p className="min-w-0 flex-1 font-serif text-[16px] leading-[1.55]">
             {live.finalText}
             <span className="text-ink-3 italic">{live.partialText}</span>
-            <span className="ml-0.5 inline-block h-3.5 w-0.5 animate-pulse bg-brand-500 align-middle" />
+            <span className="ml-0.5 inline-block h-4 w-[2px] animate-pulse bg-signal align-middle" />
           </p>
         </div>
       )}
       {pendingUploads > 0 && realtime?.status !== "live" && (
         <p className="flex items-center gap-2 text-xs text-ink-3">
-          <span className="h-2 w-2 animate-pulse rounded-full bg-brand-500" /> распознаётся…
+          <span className="h-2 w-2 animate-pulse bg-signal" /> распознаётся…
         </p>
       )}
     </div>

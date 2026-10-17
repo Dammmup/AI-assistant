@@ -26,7 +26,7 @@ export function LoginForm({ configError }: { configError: string | null }) {
   }
 
   return (
-    <form onSubmit={submit} className="space-y-5">
+    <form onSubmit={submit} className="space-y-7">
       {configError && <Alert>Сервер не настроен: {configError}</Alert>}
       <div>
         <Label htmlFor="email">Логин</Label>
@@ -42,12 +42,12 @@ export function LoginForm({ configError }: { configError: string | null }) {
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             required
-            className="pr-10"
+            className="pr-9"
           />
           <button
             type="button"
             onClick={() => setShow(!show)}
-            className="absolute top-0 right-0 flex h-9 w-9 items-center justify-center text-ink-3 hover:text-ink"
+            className="absolute top-0 right-0 flex h-10 w-8 items-center justify-end text-ink-3 hover:text-ink"
             aria-label={show ? "Скрыть пароль" : "Показать пароль"}
           >
             {show ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
@@ -55,7 +55,7 @@ export function LoginForm({ configError }: { configError: string | null }) {
         </div>
       </div>
       {error && <Alert>{error}</Alert>}
-      <Button type="submit" loading={loading} className="h-10 w-full">
+      <Button type="submit" loading={loading} className="h-11 w-full">
         Войти
       </Button>
     </form>

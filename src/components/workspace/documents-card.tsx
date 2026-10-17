@@ -1,20 +1,22 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Check, FileText, Printer } from "lucide-react";
+import { Check, Printer } from "lucide-react";
 import { apiFetch, fmtDateTime } from "@/lib/client";
 import type { AppointmentDTO, DocumentDTO, TemplateDTO } from "@/lib/dto";
 import { approvalBlockers } from "@/lib/rules";
 import type { DocumentFieldValue } from "@/lib/types";
 import { DocumentStatusBadge, FieldStatusBadge } from "../status";
-import { Alert, Button, Card, Input, Select, Textarea } from "../ui";
+import { Alert, Button, Card, Select, cx } from "../ui";
 
 export function DocumentsCard({
   appt,
   templates,
   onChange,
   defaultTemplateId = null,
+  index,
 }: {
+  index?: string;
   appt: AppointmentDTO;
   templates: TemplateDTO[];
   onChange: () => Promise<void>;
@@ -47,12 +49,12 @@ export function DocumentsCard({
   if (!["review", "completed", "archived"].includes(appt.status)) return null;
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-6">
       {editable && (
-        <Card title="Медицинские документы">
-          <div className="flex flex-wrap items-end gap-2">
-            <label className="min-w-64 flex-1 text-sm">
-              <span className="mb-1 block font-medium text-ink-2">Шаблон</span>
+        <Card index={index} title="Медицинские документы">
+          <div className="flex flex-wrap items-end gap-x-6 gap-y-4">
+            <label className="min-w-64 flex-1">
+              <span className="kicker mb-1 block text-ink-2">Шаблон</span>
               <Select value={templateId} onChange={(e) => setTemplateId(e.target.value)}>
                 {templates.map((t) => (
                   <option key={t.id} value={t.id}>
@@ -67,7 +69,7 @@ export function DocumentsCard({
               disabled={!templateId || !consentOk || !hasText || existing?.status === "approved" || appt.transcript?.status === "in_progress"}
               title={!consentOk ? "Нет согласия пациента на обработку ИИ" : !hasText ? "Транскрипция пуста" : undefined}
             >
-              <FileText className="h-4 w-4" /> Сформировать черновик
+              Сформировать черновик
             </Button>
             <Button variant="secondary" onClick={() => generate("blank")} loading={busy === "blank"} disabled={!templateId || existing?.status === "approved"}>
               Пустой бланк
@@ -79,14 +81,14 @@ export function DocumentsCard({
               <Alert>{error}</Alert>
             </div>
           )}
-          <p className="mt-3 text-xs text-ink-3">
+          <p className="mt-4 max-w-[640px] text-[13px] leading-relaxed text-ink-3">
             ИИ заполняет только поля шаблона и только сведениями из транскрипции. Поля без сведений остаются пустыми, сомнительные помечаются
             «Требует проверки». Документ не подтверждается автоматически.
           </p>
         </Card>
       )}
       {appt.documents.length === 0 && !editable && (
-        <Card title="Медицинские документы">
+        <Card index={index} title="Медицинские документы">
           <p className="text-sm text-ink-3">Документов нет.</p>
         </Card>
       )}
@@ -160,116 +162,134 @@ function DocumentEditor({ doc, editable, onChange }: { doc: DocumentDTO; editabl
   };
 
   return (
-    <Card
-      title={
-        <span className="flex flex-wrap items-center gap-2">
-          {doc.templateName}
+    <article className="border border-line-2 bg-sheet shadow-[4px_4px_0_0_rgba(20,20,20,0.06)]">
+      <header className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 border-b border-line px-6 py-2.5">
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
+          <span className="kicker text-ink-3">Документ · шаблон v{doc.templateVersion}</span>
           <DocumentStatusBadge status={doc.status} />
-        </span>
-      }
-      actions={
-        <>
-          <a href={`/print/documents/${doc.id}`} target="_blank" className="inline-flex h-8 items-center gap-1.5 rounded-[5px] px-2.5 text-[13px] font-medium text-ink-2 hover:bg-black/[0.04] hover:text-ink">
-            <Printer className="h-4 w-4" /> Печать
+        </div>
+        <div className="flex items-center gap-4">
+          <a href={`/print/documents/${doc.id}`} target="_blank" className="kicker inline-flex items-center gap-1.5 text-ink-2 hover:text-ink">
+            <Printer className="h-3.5 w-3.5" /> Печать
           </a>
           {editable && doc.status !== "approved" && (
-            <Button size="sm" variant="ghost" onClick={remove} loading={busy === "delete"}>
+            <button onClick={remove} disabled={busy === "delete"} className="kicker text-ink-3 hover:text-signal">
               Удалить
-            </Button>
+            </button>
           )}
-        </>
-      }
-    >
-      <div className="mb-4 flex flex-wrap gap-x-4 gap-y-1 text-xs text-ink-3">
-        <span>Шаблон v{doc.templateVersion}</span>
-        {doc.generatedAt && <span>Сформирован ИИ: {fmtDateTime(doc.generatedAt)}</span>}
-        {doc.reviewedAt && (
-          <span>
-            Проверен: {doc.reviewedByName}, {fmtDateTime(doc.reviewedAt)}
-          </span>
-        )}
-        {doc.approvedAt && (
-          <span className="font-medium text-[#22573a]">
-            Подтверждён: {doc.approvedByName}, {fmtDateTime(doc.approvedAt)}
-          </span>
-        )}
-        {!locked && (
-          <span>
-            Требует проверки: {counts.uncertain} · без сведений: {counts.missing} · проверено: {counts.confirmed}
-          </span>
-        )}
-      </div>
-
-      <div className="space-y-5">
-        {doc.fields.map((f) => {
-          const v = preview[f.key];
-          const d = draft[f.key];
-          const Field = f.multiline ? Textarea : Input;
-          return (
-            <div key={f.key} className={v.status === "uncertain" && !locked ? "rounded-md bg-[#fdf9f0] p-3 ring-1 ring-[#ead9b0]" : ""}>
-              <div className="mb-1 flex flex-wrap items-center gap-2">
-                <span className="text-sm font-medium text-ink">
-                  {f.label}
-                  {f.required && <span className="text-[#a3322a]"> *</span>}
-                </span>
-                <FieldStatusBadge status={v.status} />
-                {!locked && v.status !== "confirmed" && (
-                  <button
-                    type="button"
-                    className="inline-flex items-center gap-1 text-xs font-medium text-brand-600 hover:text-brand-700"
-                    onClick={() => setDraft({ ...draft, [f.key]: { ...d, confirmed: true } })}
-                  >
-                    <Check className="h-3.5 w-3.5" />
-                    {v.status === "missing" ? "Подтвердить отсутствие сведений" : "Проверено"}
-                  </button>
-                )}
-              </div>
-              {locked ? (
-                <p className="text-sm whitespace-pre-wrap text-ink">{v.value || <span className="text-ink-3">—</span>}</p>
-              ) : (
-                <Field
-                  value={d.value}
-                  rows={f.multiline ? Math.min(10, Math.max(2, d.value.split("\n").length + 1)) : undefined}
-                  onChange={(e: React.ChangeEvent<HTMLInputElement & HTMLTextAreaElement>) =>
-                    setDraft({ ...draft, [f.key]: { ...d, value: e.target.value } })
-                  }
-                  placeholder={v.status === "missing" ? "Сведений в транскрипции нет — заполните при необходимости" : undefined}
-                />
-              )}
-              {v.evidence && !locked && (
-                <p className="mt-1 text-xs text-ink-3">
-                  Источник в транскрипции: <q className="italic">{v.evidence}</q>
-                </p>
-              )}
-            </div>
-          );
-        })}
-      </div>
-
-      {error && (
-        <div className="mt-4">
-          <Alert>{error}</Alert>
         </div>
-      )}
+      </header>
+
+      <div className="px-6 pt-6 pb-2 sm:px-10">
+        <h3 className="font-serif text-[26px] leading-tight font-semibold tracking-[-0.01em]">{doc.templateName}</h3>
+        <p className="mt-2 font-mono text-[12px] text-ink-3">
+          {[
+            doc.generatedAt && `сформирован ИИ ${fmtDateTime(doc.generatedAt)}`,
+            doc.reviewedAt && `проверен ${fmtDateTime(doc.reviewedAt)}`,
+            !locked && `требует проверки: ${counts.uncertain} · без сведений: ${counts.missing} · проверено: ${counts.confirmed}`,
+          ]
+            .filter(Boolean)
+            .join("  ·  ")}
+        </p>
+
+        <div className="mt-6 border-t border-ink">
+          {doc.fields.map((f, i) => {
+            const v = preview[f.key];
+            const d = draft[f.key];
+            const uncertain = v.status === "uncertain" && !locked;
+            return (
+              <div key={f.key} className="grid gap-x-8 gap-y-2 border-b border-line py-4 md:grid-cols-[210px_minmax(0,1fr)]">
+                <div className={cx("md:pt-1", uncertain && "border-l-2 border-[#c48a1d] pl-3")}>
+                  <p className="text-[14px] leading-snug font-medium text-ink">
+                    <span className="mr-2 font-mono text-[11px] text-ink-3">{String(i + 1).padStart(2, "0")}</span>
+                    {f.label}
+                    {f.required && <span className="text-signal"> *</span>}
+                  </p>
+                  <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1">
+                    <FieldStatusBadge status={v.status} />
+                    {!locked && v.status !== "confirmed" && (
+                      <button
+                        type="button"
+                        className="kicker inline-flex items-center gap-1 text-ink underline decoration-dotted underline-offset-4 hover:decoration-solid"
+                        onClick={() => setDraft({ ...draft, [f.key]: { ...d, confirmed: true } })}
+                      >
+                        <Check className="h-3 w-3" strokeWidth={3} />
+                        {v.status === "missing" ? "нет сведений — верно" : "проверено"}
+                      </button>
+                    )}
+                  </div>
+                </div>
+                <div className="min-w-0">
+                  {locked ? (
+                    <p className="font-serif text-[17px] leading-[28px] whitespace-pre-wrap text-ink">{v.value || <span className="text-ink-3">—</span>}</p>
+                  ) : f.multiline ? (
+                    <textarea
+                      value={d.value}
+                      rows={Math.min(10, Math.max(2, d.value.split("\n").length + 1))}
+                      onChange={(e) => setDraft({ ...draft, [f.key]: { ...d, value: e.target.value } })}
+                      placeholder={v.status === "missing" ? "Сведений в расшифровке нет — заполните при необходимости" : undefined}
+                      className="ruled w-full resize-y border-0 bg-transparent px-0 font-serif text-[17px] text-ink outline-none placeholder:font-sans placeholder:text-[14px] placeholder:text-ink-3/70 focus:bg-paper/40"
+                    />
+                  ) : (
+                    <input
+                      value={d.value}
+                      onChange={(e) => setDraft({ ...draft, [f.key]: { ...d, value: e.target.value } })}
+                      placeholder={v.status === "missing" ? "Сведений нет" : undefined}
+                      className="h-[28px] w-full border-0 border-b border-line bg-transparent px-0 font-serif text-[17px] text-ink outline-none placeholder:font-sans placeholder:text-[14px] placeholder:text-ink-3/70 focus:border-ink"
+                    />
+                  )}
+                  {v.evidence && !locked && (
+                    <p className="mt-2 text-[13px] text-ink-3">
+                      <span className="kicker mr-2 text-ink-3">Источник</span>«{v.evidence}»
+                    </p>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        {error && (
+          <div className="mt-4">
+            <Alert>{error}</Alert>
+          </div>
+        )}
+
+        {doc.approvedAt ? (
+          <div className="mt-8 mb-4 flex flex-wrap items-end justify-between gap-6">
+            <div>
+              <p className="kicker text-ink-3">Подтверждено врачом</p>
+              <p className="mt-1 font-serif text-[18px]">{doc.approvedByName}</p>
+              <p className="font-mono text-[12px] text-ink-3">{fmtDateTime(doc.approvedAt)}</p>
+            </div>
+            <span className="border-2 border-ok px-3 py-1 font-mono text-[12px] tracking-[0.12em] text-ok uppercase">Подтверждён</span>
+          </div>
+        ) : null}
+      </div>
 
       {editable && (
-        <div className="mt-6 space-y-3 border-t border-line pt-4">
+        <footer className="space-y-4 border-t border-line bg-paper/50 px-6 py-5 sm:px-10">
           {doc.status !== "approved" ? (
             <>
-              <div className="flex flex-wrap items-center gap-3">
-                <Button variant={dirty || doc.status !== "review" ? "primary" : "secondary"} onClick={save} loading={busy === "save"} disabled={!dirty && doc.status === "review"}>
+              <div className="flex flex-wrap items-center gap-4">
+                <Button
+                  variant={dirty || doc.status !== "review" ? "primary" : "secondary"}
+                  onClick={save}
+                  loading={busy === "save"}
+                  disabled={!dirty && doc.status === "review"}
+                >
                   {doc.status === "review" ? "Сохранить изменения" : "Сохранить и перейти к проверке"}
                 </Button>
-                {dirty && <span className="text-sm text-[#7a5410]">Есть несохранённые изменения</span>}
+                {dirty && <span className="kicker text-warn">Есть несохранённые изменения</span>}
               </div>
               {doc.status === "review" && !dirty && (
-                <div className="rounded-md border border-line bg-paper p-3">
+                <div className="border-t border-line pt-4">
                   {blockers.length > 0 ? (
                     <Alert tone="yellow">{`Перед подтверждением проверьте поля:\n${blockers.join("\n")}`}</Alert>
                   ) : (
-                    <div className="flex flex-wrap items-center gap-3">
-                      <label className="flex items-center gap-2 text-sm">
-                        <input type="checkbox" checked={reviewed} onChange={(e) => setReviewed(e.target.checked)} />
+                    <div className="flex flex-wrap items-center gap-x-6 gap-y-3">
+                      <label className="flex cursor-pointer items-center gap-2.5 text-[14px]">
+                        <input type="checkbox" checked={reviewed} onChange={(e) => setReviewed(e.target.checked)} className="h-4 w-4 accent-[#141414]" />
                         Я проверил(а) документ и подтверждаю его содержание
                       </label>
                       <Button onClick={approve} disabled={!reviewed} loading={busy === "approve"}>
@@ -285,8 +305,8 @@ function DocumentEditor({ doc, editable, onChange }: { doc: DocumentDTO; editabl
               Вернуть на проверку
             </Button>
           )}
-        </div>
+        </footer>
       )}
-    </Card>
+    </article>
   );
 }

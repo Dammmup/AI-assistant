@@ -23,7 +23,7 @@ export function TemplatesManager({ templates }: { templates: TemplateDTO[] }) {
   const [editing, setEditing] = useState<Editable | null>(null);
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-10">
       {!editing && (
         <>
           <div className="flex justify-end">
@@ -98,7 +98,7 @@ function TemplateEditor({ value, onCancel, onSaved }: { value: Editable; onCance
 
   return (
     <Card title={t.id ? "Изменение шаблона" : "Новый шаблон"}>
-      <div className="grid gap-4 sm:grid-cols-2">
+      <div className="grid gap-x-8 gap-y-6 sm:grid-cols-2">
         <div>
           <Label>Название</Label>
           <Input value={t.name} onChange={(e) => setT({ ...t, name: e.target.value })} />
@@ -117,14 +117,14 @@ function TemplateEditor({ value, onCancel, onSaved }: { value: Editable; onCance
         </label>
       </div>
 
-      <h3 className="mt-8 mb-1 text-[15px] font-semibold">Поля документа</h3>
+      <h3 className="mt-10 mb-1 text-[13px] font-semibold tracking-[0.08em] uppercase">Поля документа</h3>
       <p className="mb-3 text-xs text-ink-3">
         Описание поля передаётся ИИ как инструкция: что именно извлекать из транскрипции. Изменение шаблона повышает его версию; уже созданные документы не
         меняются.
       </p>
       <div className="space-y-3">
         {t.fields.map((f, i) => (
-          <div key={i} className="grid gap-2 rounded-md border border-line bg-paper/50 p-3 sm:grid-cols-[1fr_1fr_auto]">
+          <div key={i} className="grid gap-x-6 gap-y-3 border-l-2 border-ink bg-sheet py-3 pr-3 pl-4 sm:grid-cols-[1fr_1fr_auto]">
             <Input placeholder="Название поля" value={f.label} onChange={(e) => setField(i, { label: e.target.value })} />
             <Input placeholder="ключ (латиница)" value={f.key} onChange={(e) => setField(i, { key: e.target.value })} />
             <div className="flex items-center gap-1">

@@ -6,7 +6,7 @@ import { Avatar } from "../shell/avatar";
 import { useRouter } from "next/navigation";
 import { apiFetch, fmtDateTime } from "@/lib/client";
 import { ROLE_LABEL } from "@/lib/labels";
-import { Alert, Badge, Button, Card, Input, Label, Select } from "../ui";
+import { Alert, Badge, Button, Card, Input, Label, Select, cx } from "../ui";
 
 type UserRow = {
   id: string;
@@ -52,24 +52,24 @@ export function UsersManager({ users, meId }: { users: UserRow[]; meId: string }
   const patch = (id: string, json: object) => run(id, () => apiFetch(`/api/admin/users/${id}`, { method: "PATCH", json }));
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-12">
       {error && <Alert>{error}</Alert>}
-      <div className="overflow-x-auto rounded-md border border-line bg-white">
+      <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
-            <tr className="border-b border-line text-left text-[12px] text-ink-3">
-              <th className="px-4 py-2.5 font-medium">Сотрудник</th>
-              <th className="px-4 py-2.5 font-medium">Роль</th>
-              <th className="px-4 py-2.5 font-medium">Статус</th>
-              <th className="hidden px-4 py-2.5 font-medium md:table-cell">Создан</th>
-              <th className="px-4 py-2.5" />
+            <tr className="kicker border-y border-ink text-left text-ink-3">
+              <th className="py-2.5 pr-4 font-normal">Сотрудник</th>
+              <th className="py-2.5 pr-4 font-normal">Роль</th>
+              <th className="py-2.5 pr-4 font-normal">Статус</th>
+              <th className="hidden py-2.5 pr-4 font-normal md:table-cell">Создан</th>
+              <th className="py-2.5" />
             </tr>
           </thead>
-          <tbody className="divide-y divide-line">
+          <tbody>
             {users.map((u) => (
               <Fragment key={u.id}>
-                <tr className={u.isActive ? "" : "text-ink-3"}>
-                  <td className="px-4 py-3">
+                <tr className={cx("border-b border-line", !u.isActive && "text-ink-3")}>
+                  <td className="py-3 pr-4">
                     <div className="flex items-center gap-3">
                       <Avatar name={u.fullName} color={u.avatarColor} />
                       <div className="min-w-0 leading-tight">
@@ -84,7 +84,7 @@ export function UsersManager({ users, meId }: { users: UserRow[]; meId: string }
                       </div>
                     </div>
                   </td>
-                  <td className="px-4 py-3">
+                  <td className="py-3 pr-4">
                     <Select
                       className="h-8 w-auto text-[13px]"
                       value={u.role}
@@ -95,9 +95,9 @@ export function UsersManager({ users, meId }: { users: UserRow[]; meId: string }
                       <option value="admin">{ROLE_LABEL.admin}</option>
                     </Select>
                   </td>
-                  <td className="px-4 py-3">{u.isActive ? <Badge tone="green">Активен</Badge> : <Badge tone="red">Отключён</Badge>}</td>
-                  <td className="hidden px-4 py-3 font-mono text-[13px] whitespace-nowrap text-ink-3 tabular md:table-cell">{fmtDateTime(u.createdAt)}</td>
-                  <td className="px-4 py-3 text-right whitespace-nowrap">
+                  <td className="py-3 pr-4">{u.isActive ? <Badge tone="green">Активен</Badge> : <Badge tone="red">Отключён</Badge>}</td>
+                  <td className="hidden py-3 pr-4 font-mono text-[13px] whitespace-nowrap text-ink-3 tabular md:table-cell">{fmtDateTime(u.createdAt)}</td>
+                  <td className="py-3 pr-4 text-right whitespace-nowrap">
                     <Button size="sm" variant="ghost" onClick={() => setResetFor(resetFor === u.id ? null : u.id)}>
                       <KeyRound className="h-4 w-4" /> Пароль
                     </Button>
@@ -109,7 +109,7 @@ export function UsersManager({ users, meId }: { users: UserRow[]; meId: string }
                   </td>
                 </tr>
                 {resetFor === u.id && (
-                  <tr className="bg-paper/60">
+                  <tr className="border-b border-line bg-sheet">
                     <td colSpan={5} className="px-4 py-3">
                       <form
                         className="flex flex-wrap items-center gap-2"
@@ -121,10 +121,10 @@ export function UsersManager({ users, meId }: { users: UserRow[]; meId: string }
                           }
                         }}
                       >
-                        <span className="text-[13px] text-ink-2">Новый пароль для {u.email}:</span>
+                        <span className="kicker text-ink-2">Новый пароль для {u.email}</span>
                         <Input
                           type="text"
-                          className="h-8 max-w-56"
+                          className="h-8 max-w-60"
                           minLength={8}
                           required
                           autoFocus
@@ -149,7 +149,7 @@ export function UsersManager({ users, meId }: { users: UserRow[]; meId: string }
         </table>
       </div>
       <Card title="Новый пользователь">
-        <form onSubmit={create} className="grid gap-4 sm:grid-cols-2">
+        <form onSubmit={create} className="grid gap-x-8 gap-y-6 sm:grid-cols-2">
           <div>
             <Label htmlFor="u-name">ФИО</Label>
             <Input id="u-name" value={form.fullName} onChange={(e) => setForm({ ...form, fullName: e.target.value })} required />

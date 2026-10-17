@@ -29,7 +29,7 @@ export default async function PrintDocumentPage({ params }: { params: Promise<{ 
         </div>
       )}
       {doctor?.organization && <p className="text-center text-[13px] tracking-wide text-ink-2">{doctor.organization}</p>}
-      <h1 className="mt-2 text-center text-xl font-bold uppercase">{doc.templateName}</h1>
+      <h1 className="mt-2 text-center font-serif text-2xl font-semibold">{doc.templateName}</h1>
       <table className="mt-6 w-full text-sm">
         <tbody>
           <Row label="Пациент" value={patient?.fullName ?? appt.patientName} />
@@ -42,8 +42,8 @@ export default async function PrintDocumentPage({ params }: { params: Promise<{ 
       <div className="mt-6 space-y-4">
         {doc.fields.map((f) => (
           <section key={f.key}>
-            <h2 className="font-semibold">{f.label}</h2>
-            <p className="whitespace-pre-wrap">{doc.content[f.key]?.value || "—"}</p>
+            <h2 className="text-[12px] font-semibold tracking-[0.08em] uppercase">{f.label}</h2>
+            <p className="font-serif text-[16px] whitespace-pre-wrap">{doc.content[f.key]?.value || "—"}</p>
           </section>
         ))}
       </div>

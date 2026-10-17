@@ -1,54 +1,97 @@
 @import "tailwindcss";
 
 @theme {
-  --font-sans: "Golos Text Variable", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+  --font-sans: "IBM Plex Sans", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Arial, sans-serif;
+  --font-serif: "Source Serif 4 Variable", "PT Serif", Georgia, "Times New Roman", serif;
   --font-mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
 
-  /* Основной акцент — сдержанный «чернильный» синий */
-  --color-brand-50: #f1f4f8;
-  --color-brand-100: #e2e9f1;
-  --color-brand-200: #c5d3e3;
-  --color-brand-500: #3d6390;
-  --color-brand-600: #2b4c74;
-  --color-brand-700: #213c5d;
-  --color-brand-900: #142538;
+  /* Бланк: прямые углы во всём интерфейсе */
+  --radius-xs: 0px;
+  --radius-sm: 0px;
+  --radius-md: 0px;
+  --radius-lg: 0px;
+  --radius-xl: 0px;
+  --radius-2xl: 0px;
+  --radius-3xl: 0px;
 
   /* Бумага и чернила */
-  --color-paper: #f5f4f0;
-  --color-ink: #161c26;
-  --color-ink-2: #465063;
-  --color-ink-3: #7a8292;
-  --color-line: #e2dfd7;
-  --color-line-2: #cdc9bd;
-  --color-sidebar: #151b25;
+  --color-paper: #f6f5f0;
+  --color-sheet: #fffffd;
+  --color-ink: #141414;
+  --color-ink-2: #3f3e3a;
+  --color-ink-3: #77756e;
+  --color-line: #dedbd2;
+  --color-line-2: #b9b5a9;
+
+  /* Один сигнальный цвет — для записи, текущего шага, обязательных полей и ошибок */
+  --color-signal: #c4321f;
+  --color-ok: #1f6b43;
+  --color-warn: #93620a;
+
+  /* Совместимость со старыми классами brand-* — теперь это чернила */
+  --color-brand-50: #f0efea;
+  --color-brand-100: #e6e4dc;
+  --color-brand-200: #c9c6bb;
+  --color-brand-500: #3f3e3a;
+  --color-brand-600: #141414;
+  --color-brand-700: #000000;
+  --color-brand-900: #000000;
+  --color-sidebar: #141414;
 }
 
 :root {
   color-scheme: light;
 }
 
-html {
-  font-feature-settings: "ss01", "cv11";
-}
-
 body {
   background: var(--color-paper);
   color: var(--color-ink);
   -webkit-font-smoothing: antialiased;
+  font-size: 15px;
 }
 
 ::selection {
-  background: #c5d3e3;
+  background: #141414;
+  color: #fffffd;
 }
 
-/* Тонкий акцент фокуса вместо стандартного кольца */
 :focus-visible {
-  outline: 2px solid var(--color-brand-500);
+  outline: 2px solid var(--color-ink);
   outline-offset: 2px;
 }
 
 .tabular {
   font-variant-numeric: tabular-nums;
+}
+
+/* Подпись раздела бланка: моноширинный шрифт, капитель */
+.kicker {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+/* Строки «под линейку» для граф документа */
+.ruled {
+  line-height: 28px;
+  background-image: repeating-linear-gradient(to bottom, transparent 0, transparent 27px, var(--color-line) 27px, var(--color-line) 28px);
+  background-attachment: local;
+  padding-top: 0;
+  padding-bottom: 0;
+}
+
+/* Стрелка для выпадающих списков без системного оформления */
+.select-arrow {
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%23141414'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 2px center;
+}
+
+input[type="date"]::-webkit-calendar-picker-indicator {
+  opacity: 0.6;
+  cursor: pointer;
 }
 
 @media print {
