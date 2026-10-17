@@ -4,7 +4,8 @@ import { useEffect, useRef, useState } from "react";
 import { apiFetch, fmtBytes, fmtDuration } from "@/lib/client";
 import type { AppointmentDTO } from "@/lib/dto";
 import { LANGUAGE_LABEL } from "@/lib/labels";
-import { Alert, Button, Card, Select } from "../ui";
+import { Square } from "lucide-react";
+import { Alert, Badge, Button, Card, Select } from "../ui";
 import { Preflight } from "./preflight";
 import { useRealtimeStt, type LiveUtterance, type RealtimeStatus } from "./use-realtime-stt";
 import { useSegmentRecorder, type UploadedSegment } from "./use-segment-recorder";
@@ -150,7 +151,7 @@ export function RecordingCard({
       title="Запись приёма"
       actions={
         appt.recording && !recordingHere ? (
-          <span className="text-sm text-slate-500">
+          <span className="text-sm text-ink-3">
             Записано: {fmtDuration(appt.recording.durationSeconds)} · фрагментов: {appt.recording.segmentsCount} ·{" "}
             {fmtBytes(appt.recording.totalBytes)}
           </span>
@@ -186,13 +187,13 @@ export function RecordingCard({
           {!recordingHere ? (
             canStart && (
               <Button onClick={start} loading={rec.phase === "starting"}>
-                <span className="h-2.5 w-2.5 rounded-full bg-red-400" />
+                <span className="h-2 w-2 rounded-full bg-[#e0645a]" />
                 {appt.status === "recording" ? "Продолжить запись" : appt.status === "review" ? "Дозаписать" : "Начать запись"}
               </Button>
             )
           ) : (
             <Button variant="danger" onClick={stop} loading={rec.phase === "stopping" || busy === "stop"} disabled={rec.phase === "starting"}>
-              ■ Завершить запись
+              <Square className="h-3.5 w-3.5 fill-current" /> Завершить запись
             </Button>
           )}
           {interrupted && (
@@ -203,26 +204,26 @@ export function RecordingCard({
 
           {recordingHere && (
             <div className="flex items-center gap-3 text-sm">
-              <span className="flex items-center gap-1.5 font-medium text-red-600">
-                <span className="h-2.5 w-2.5 animate-pulse rounded-full bg-red-600" />
+              <span className="flex items-center gap-1.5 font-mono font-medium text-[#a3322a] tabular">
+                <span className="h-2 w-2 animate-pulse rounded-full bg-[#b9443a]" />
                 {fmtDuration(rec.elapsed)}
               </span>
-              <span className="h-2 w-28 overflow-hidden rounded-full bg-slate-200" title="Уровень сигнала микрофона">
-                <span className="block h-full bg-emerald-500 transition-[width] duration-100" style={{ width: `${Math.round(rec.level * 100)}%` }} />
+              <span className="h-1.5 w-28 overflow-hidden rounded-full bg-line" title="Уровень сигнала микрофона">
+                <span className="block h-full bg-[#3b8a5c] transition-[width] duration-100" style={{ width: `${Math.round(rec.level * 100)}%` }} />
               </span>
               {rt.status === "live" && (
-                <span className="rounded-full bg-violet-100 px-2 py-0.5 text-xs font-medium text-violet-800" title="Слова появляются по мере речи (Soniox)">
-                  ⚡ мгновенное распознавание
-                </span>
+                <Badge tone="violet" title="Слова появляются по мере речи (Soniox)">
+                  распознавание в реальном времени
+                </Badge>
               )}
-              {rt.status === "connecting" && <span className="text-xs text-slate-500">подключение к Soniox…</span>}
+              {rt.status === "connecting" && <span className="text-xs text-ink-3">подключение к Soniox…</span>}
               {rt.status !== "live" && rec.latency !== null && (
-                <span className={rec.latency > 5 ? "text-amber-700" : "text-slate-500"} title="Время от конца фразы до появления текста">
+                <span className={rec.latency > 5 ? "text-[#7a5410]" : "text-ink-3"} title="Время от конца фразы до появления текста">
                   задержка текста ~{rec.latency.toFixed(1)} с
                 </span>
               )}
               {inFlight.length > 0 && (
-                <span className="text-slate-500">
+                <span className="text-ink-3">
                   отправка фрагментов: {inFlight.length} ({fmtBytes(inFlight.reduce((s, q) => s + q.blob.size, 0))})
                 </span>
               )}
@@ -254,8 +255,8 @@ export function RecordingCard({
         )}
 
         {appt.status === "draft" && hasConsentDecision && (
-          <div className="flex flex-wrap items-center gap-2 border-t border-slate-100 pt-4 text-sm">
-            <span className="text-slate-500">Другие способы:</span>
+          <div className="flex flex-wrap items-center gap-2 border-t border-line pt-4 text-sm">
+            <span className="text-ink-3">Другие способы:</span>
             {consentOk && (
               <>
                 <input
@@ -278,7 +279,7 @@ export function RecordingCard({
 
         {appt.status === "processing" && <Alert tone="blue">Идёт распознавание оставшихся фрагментов…</Alert>}
         {error && <Alert>{error}</Alert>}
-        <p className="text-xs text-slate-500">
+        <p className="text-xs text-ink-3">
           {realtimeAvailable
             ? "Слова появляются по мере речи (Soniox). Голоса разделяются по звуку, роли «Врач» / «Пациент» определяются автоматически и исправляются при проверке. Если Soniox недоступен, запись продолжается с распознаванием по фразам."
             : "Текст появляется после каждой фразы — запись нарезается по паузам в речи (фрагменты 3–12 с). Реплики автоматически размечаются «Врач» / «Пациент»; разметку можно исправить при проверке."}{" "}

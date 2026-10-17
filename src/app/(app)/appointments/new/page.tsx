@@ -1,12 +1,16 @@
+import type { Metadata } from "next";
 import { requirePageUser } from "@/lib/auth";
 import { NewAppointmentForm } from "@/components/new-appointment-form";
+import { PageHeader } from "@/components/ui";
+
+export const metadata: Metadata = { title: "Новый приём" };
 
 export default async function NewAppointmentPage() {
-  await requirePageUser("doctor");
+  const user = await requirePageUser("doctor");
   return (
-    <div className="mx-auto max-w-2xl space-y-4">
-      <h1 className="text-2xl font-semibold">Новый приём</h1>
-      <NewAppointmentForm />
+    <div className="max-w-[720px]">
+      <PageHeader title="Новый приём" description="Укажите пациента. Запись и согласие — на следующем шаге." />
+      <NewAppointmentForm defaultLanguage={user.preferences?.defaultLanguage ?? "ru"} />
     </div>
   );
 }

@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { ArrowDown, ArrowUp, Plus, Trash2 } from "lucide-react";
 import { apiFetch } from "@/lib/client";
 import type { TemplateDTO } from "@/lib/dto";
 import type { TemplateField } from "@/lib/types";
@@ -26,7 +27,9 @@ export function TemplatesManager({ templates }: { templates: TemplateDTO[] }) {
       {!editing && (
         <>
           <div className="flex justify-end">
-            <Button onClick={() => setEditing(structuredClone(EMPTY))}>+ Новый шаблон</Button>
+            <Button onClick={() => setEditing(structuredClone(EMPTY))}>
+              <Plus className="h-4 w-4" /> Новый шаблон
+            </Button>
           </div>
           {templates.map((t) => (
             <Card
@@ -43,9 +46,9 @@ export function TemplatesManager({ templates }: { templates: TemplateDTO[] }) {
                 </Button>
               }
             >
-              {t.description && <p className="mb-2 text-sm text-slate-600">{t.description}</p>}
-              <p className="text-sm text-slate-500">
-                Тип: <code>{t.documentType}</code> · Поля: {t.fields.map((f) => f.label).join(", ")}
+              {t.description && <p className="mb-2 text-sm text-ink-2">{t.description}</p>}
+              <p className="text-sm text-ink-3">
+                <span className="font-mono text-[12px] text-ink-2">{t.documentType}</span> · {t.fields.length} полей: {t.fields.map((f) => f.label).join(", ")}
               </p>
             </Card>
           ))}
@@ -114,25 +117,25 @@ function TemplateEditor({ value, onCancel, onSaved }: { value: Editable; onCance
         </label>
       </div>
 
-      <h3 className="mt-6 mb-2 text-sm font-semibold">Поля документа</h3>
-      <p className="mb-3 text-xs text-slate-500">
+      <h3 className="mt-8 mb-1 text-[15px] font-semibold">Поля документа</h3>
+      <p className="mb-3 text-xs text-ink-3">
         Описание поля передаётся ИИ как инструкция: что именно извлекать из транскрипции. Изменение шаблона повышает его версию; уже созданные документы не
         меняются.
       </p>
       <div className="space-y-3">
         {t.fields.map((f, i) => (
-          <div key={i} className="grid gap-2 rounded-lg border border-slate-200 p-3 sm:grid-cols-[1fr_1fr_auto]">
+          <div key={i} className="grid gap-2 rounded-md border border-line bg-paper/50 p-3 sm:grid-cols-[1fr_1fr_auto]">
             <Input placeholder="Название поля" value={f.label} onChange={(e) => setField(i, { label: e.target.value })} />
             <Input placeholder="ключ (латиница)" value={f.key} onChange={(e) => setField(i, { key: e.target.value })} />
             <div className="flex items-center gap-1">
-              <Button size="sm" variant="ghost" onClick={() => move(i, -1)} title="Выше">
-                ↑
+              <Button size="sm" variant="ghost" onClick={() => move(i, -1)} title="Выше" aria-label="Выше">
+                <ArrowUp className="h-4 w-4" />
               </Button>
-              <Button size="sm" variant="ghost" onClick={() => move(i, 1)} title="Ниже">
-                ↓
+              <Button size="sm" variant="ghost" onClick={() => move(i, 1)} title="Ниже" aria-label="Ниже">
+                <ArrowDown className="h-4 w-4" />
               </Button>
-              <Button size="sm" variant="ghost" onClick={() => setT({ ...t, fields: t.fields.filter((_, j) => j !== i) })} title="Удалить">
-                ✕
+              <Button size="sm" variant="ghost" onClick={() => setT({ ...t, fields: t.fields.filter((_, j) => j !== i) })} title="Удалить поле" aria-label="Удалить поле">
+                <Trash2 className="h-4 w-4" />
               </Button>
             </div>
             <Textarea
@@ -161,7 +164,7 @@ function TemplateEditor({ value, onCancel, onSaved }: { value: Editable; onCance
         size="sm"
         onClick={() => setT({ ...t, fields: [...t.fields, { key: "", label: "", description: "", required: false, multiline: true }] })}
       >
-        + Добавить поле
+        <Plus className="h-4 w-4" /> Добавить поле
       </Button>
       {error && (
         <div className="mt-4">

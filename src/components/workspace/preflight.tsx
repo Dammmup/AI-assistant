@@ -10,36 +10,36 @@ import type { RealtimeStatus } from "./use-realtime-stt";
 type Light = "green" | "yellow" | "red" | "gray";
 
 const DOT: Record<Light, string> = {
-  green: "bg-emerald-500",
-  yellow: "bg-amber-400",
-  red: "bg-red-500",
-  gray: "bg-slate-300",
+  green: "bg-[#3b8a5c]",
+  yellow: "bg-[#c48a1d]",
+  red: "bg-[#b9443a]",
+  gray: "bg-line-2",
 };
 const BOX: Record<Light, string> = {
-  green: "border-emerald-200 bg-emerald-50/60",
-  yellow: "border-amber-200 bg-amber-50/70",
-  red: "border-red-200 bg-red-50/70",
-  gray: "border-slate-200 bg-slate-50",
+  green: "border-line bg-white",
+  yellow: "border-[#ead9b0] bg-[#fdf9f0]",
+  red: "border-[#e8c5c0] bg-[#fdf5f4]",
+  gray: "border-line bg-white",
 };
 
 function Indicator({ title, light, status, detail, action }: { title: string; light: Light; status: string; detail?: string; action?: React.ReactNode }) {
   return (
-    <div className={cx("flex min-w-0 flex-1 items-start gap-3 rounded-lg border px-3 py-2.5", BOX[light])}>
-      <span className={cx("mt-1 h-3 w-3 shrink-0 rounded-full", DOT[light], light !== "gray" && "shadow-[0_0_0_3px_rgba(255,255,255,0.8)]")} />
+    <div className={cx("flex min-w-0 flex-1 items-start gap-3 rounded-md border px-3 py-2.5", BOX[light])}>
+      <span className={cx("mt-1 h-3 w-3 shrink-0 rounded-full", DOT[light], light !== "gray" && "shadow-[0_0_0_3px_rgba(0,0,0,0.04)]")} />
       <div className="min-w-0 flex-1">
         <div className="flex items-center justify-between gap-2">
-          <span className="text-xs font-medium tracking-wide text-slate-500 uppercase">{title}</span>
+          <span className="text-[12px] text-ink-3">{title}</span>
           {action}
         </div>
-        <div className="text-sm font-medium text-slate-900">{status}</div>
-        {detail && <div className="text-xs text-slate-600">{detail}</div>}
+        <div className="text-sm font-medium text-ink">{status}</div>
+        {detail && <div className="text-xs text-ink-2">{detail}</div>}
       </div>
     </div>
   );
 }
 
 const SmallButton = ({ onClick, children, disabled }: { onClick: () => void; children: React.ReactNode; disabled?: boolean }) => (
-  <button type="button" onClick={onClick} disabled={disabled} className="text-xs font-medium text-brand-700 hover:underline disabled:text-slate-400 disabled:no-underline">
+  <button type="button" onClick={onClick} disabled={disabled} className="text-xs font-medium text-brand-700 hover:underline disabled:text-ink-3 disabled:no-underline">
     {children}
   </button>
 );
@@ -374,7 +374,7 @@ export function Preflight({
     <div className="space-y-2">
       <div className="flex items-center gap-2 text-sm">
         <span className={cx("h-2.5 w-2.5 rounded-full", DOT[overall])} />
-        <span className="font-medium text-slate-800">{summary}</span>
+        <span className="font-medium text-ink">{summary}</span>
       </div>
       <div className="flex flex-col gap-2 md:flex-row">
         <Indicator

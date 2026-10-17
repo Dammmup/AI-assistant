@@ -15,8 +15,8 @@ function secret() {
   return new TextEncoder().encode(s);
 }
 
-export async function createSession(user: Pick<UserDoc, "_id" | "role">) {
-  const token = await new SignJWT({ role: user.role })
+export async function createSession(user: Pick<UserDoc, "_id" | "role" | "sessionVersion">) {
+  const token = await new SignJWT({ role: user.role, sv: user.sessionVersion ?? 0 })
     .setProtectedHeader({ alg: "HS256" })
     .setSubject(user._id.toHexString())
     .setIssuedAt()
@@ -35,15 +35,17 @@ export async function destroySession() {
   (await cookies()).delete(SESSION_COOKIE);
 }
 
-export type SessionUser = Pick<UserDoc, "_id" | "fullName" | "email" | "role">;
+export type SessionUser = Pick<UserDoc, "_id" | "fullName" | "email" | "role" | "position" | "organization" | "preferences" | "sessionVersion">;
 
 export async function getCurrentUser(): Promise<SessionUser | null> {
   const token = (await cookies()).get(SESSION_COOKIE)?.value;
   if (!token) return null;
   let sub: string | undefined;
+  let sv = 0;
   try {
     const { payload } = await jwtVerify(token, secret());
     sub = payload.sub;
+    sv = typeof payload.sv === "number" ? payload.sv : 0;
   } catch {
     return null;
   }
@@ -51,8 +53,10 @@ export async function getCurrentUser(): Promise<SessionUser | null> {
   const { users } = await collections();
   const user = await users.findOne(
     { _id: new ObjectId(sub), isActive: true },
-    { projection: { fullName: 1, email: 1, role: 1 } },
+    { projection: { fullName: 1, email: 1, role: 1, position: 1, organization: 1, preferences: 1, sessionVersion: 1 } },
   );
+  // Сессия, выданная до смены пароля или «выхода на всех устройствах», недействительна.
+  if (!user || (user.sessionVersion ?? 0) !== sv) return null;
   return user;
 }
 

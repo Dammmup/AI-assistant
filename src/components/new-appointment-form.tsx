@@ -7,7 +7,7 @@ import type { PatientDTO } from "@/lib/dto";
 import { LANGUAGE_LABEL } from "@/lib/labels";
 import { Alert, Button, Card, Input, Label, Select, Textarea } from "./ui";
 
-export function NewAppointmentForm() {
+export function NewAppointmentForm({ defaultLanguage = "ru" }: { defaultLanguage?: "ru" | "kk" | "auto" }) {
   const router = useRouter();
   const [mode, setMode] = useState<"existing" | "new">("new");
   const [query, setQuery] = useState("");
@@ -17,7 +17,7 @@ export function NewAppointmentForm() {
   const [dateOfBirth, setDateOfBirth] = useState("");
   const [externalPatientId, setExternalPatientId] = useState("");
   const [reason, setReason] = useState("");
-  const [language, setLanguage] = useState<"ru" | "kk" | "auto">("ru");
+  const [language, setLanguage] = useState<"ru" | "kk" | "auto">(defaultLanguage);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -57,13 +57,13 @@ export function NewAppointmentForm() {
   return (
     <form onSubmit={submit} className="space-y-4">
       <Card title="Пациент">
-        <div className="mb-4 inline-flex rounded-lg bg-slate-100 p-1 text-sm">
+        <div className="mb-5 inline-flex rounded-[5px] border border-line-2 p-0.5 text-[13px]">
           {(["new", "existing"] as const).map((m) => (
             <button
               type="button"
               key={m}
               onClick={() => setMode(m)}
-              className={`rounded-md px-3 py-1.5 ${mode === m ? "bg-white font-medium shadow-sm" : "text-slate-600"}`}
+              className={`rounded-[4px] px-3 py-1.5 ${mode === m ? "bg-ink font-medium text-white" : "text-ink-2 hover:text-ink"}`}
             >
               {m === "new" ? "Новый пациент" : "Из моих пациентов"}
             </button>
@@ -87,17 +87,17 @@ export function NewAppointmentForm() {
         ) : (
           <div className="space-y-3">
             <Input placeholder="Поиск по ФИО" value={query} onChange={(e) => setQuery(e.target.value)} autoFocus />
-            <div className="max-h-64 divide-y divide-slate-100 overflow-auto rounded-lg border border-slate-200">
-              {results.length === 0 && <p className="p-3 text-sm text-slate-500">Пациенты не найдены</p>}
+            <div className="max-h-64 divide-y divide-line overflow-auto rounded-[5px] border border-line">
+              {results.length === 0 && <p className="p-3 text-sm text-ink-3">Пациенты не найдены</p>}
               {results.map((p) => (
                 <button
                   type="button"
                   key={p.id}
                   onClick={() => setSelected(p)}
-                  className={`block w-full px-3 py-2 text-left text-sm hover:bg-slate-50 ${selected?.id === p.id ? "bg-brand-50" : ""}`}
+                  className={`block w-full px-3 py-2.5 text-left text-sm hover:bg-paper ${selected?.id === p.id ? "bg-brand-50 shadow-[inset_2px_0_0_var(--color-brand-600)]" : ""}`}
                 >
                   <span className="font-medium">{p.fullName}</span>
-                  <span className="ml-2 text-slate-500">
+                  <span className="ml-2 text-ink-3">
                     {p.dateOfBirth ? `д.р. ${fmtDate(p.dateOfBirth)}` : ""} {p.externalPatientId ? `· ID ${p.externalPatientId}` : ""}
                   </span>
                 </button>

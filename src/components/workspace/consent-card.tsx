@@ -36,11 +36,11 @@ export function ConsentCard({ appt, onChange }: { appt: AppointmentDTO; onChange
       <Card title="Согласие пациента">
         <div className="flex flex-wrap items-center gap-2 text-sm">
           {c.status === "obtained" ? <Badge tone="green">Согласие получено</Badge> : <Badge tone="red">Пациент отказался</Badge>}
-          <span className="text-slate-600">
+          <span className="text-ink-2">
             {CONSENT_METHODS[c.method]} · {fmtDateTime(c.obtainedAt)} · {c.obtainedByName} · версия текста {c.consentTextVersion}
           </span>
         </div>
-        {c.note && <p className="mt-2 text-sm text-slate-600">Примечание: {c.note}</p>}
+        {c.note && <p className="mt-2 text-sm text-ink-2">Примечание: {c.note}</p>}
       </Card>
     );
   }
@@ -55,8 +55,8 @@ export function ConsentCard({ appt, onChange }: { appt: AppointmentDTO; onChange
           </Alert>
         </div>
       )}
-      <div className="rounded-lg bg-slate-50 p-4 text-sm leading-relaxed whitespace-pre-line text-slate-800">{CONSENT_TEXT}</div>
-      <p className="mt-1 text-xs text-slate-500">Версия текста согласия: {CONSENT_VERSION}</p>
+      <div className="rounded-md bg-paper p-4 text-sm leading-relaxed whitespace-pre-line text-ink">{CONSENT_TEXT}</div>
+      <p className="mt-1 text-xs text-ink-3">Версия текста согласия: {CONSENT_VERSION}</p>
       <div className="mt-4 grid gap-4 sm:grid-cols-2">
         <div>
           <Label>Форма согласия</Label>

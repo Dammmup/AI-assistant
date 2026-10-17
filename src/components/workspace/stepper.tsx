@@ -1,38 +1,42 @@
+import { Check } from "lucide-react";
 import type { AppointmentDTO } from "@/lib/dto";
-import { cx } from "../ui";
+import { cx } from "@/lib/cx";
 
-export function Stepper({ appt }: { appt: AppointmentDTO }) {
+export function appointmentSteps(appt: AppointmentDTO) {
   const docs = appt.documents;
-  const steps: { label: string; done: boolean }[] = [
-    { label: "Запись приёма создана", done: true },
+  return [
+    { label: "Приём создан", done: true },
     { label: "Согласие пациента", done: !!appt.consent },
-    { label: "Запись и транскрипция", done: !!appt.transcript && ["review", "completed", "archived"].includes(appt.status) },
-    { label: "Структурирование ИИ", done: docs.some((d) => d.model) },
-    { label: "Заполнение шаблонов", done: docs.length > 0 },
+    { label: "Запись и расшифровка", done: !!appt.transcript && ["review", "completed", "archived"].includes(appt.status) },
+    { label: "Черновик документа", done: docs.length > 0 },
     { label: "Проверка врачом", done: docs.length > 0 && docs.every((d) => d.status === "review" || d.status === "approved") },
     { label: "Подтверждение", done: ["completed", "archived"].includes(appt.status) },
     { label: "Архив", done: appt.status === "archived" },
   ];
+}
+
+/** Ход приёма — вертикальная шкала этапов. */
+export function Stepper({ appt }: { appt: AppointmentDTO }) {
+  const steps = appointmentSteps(appt);
   const current = steps.findIndex((s) => !s.done);
   return (
-    <ol className="no-print grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-8">
+    <ol className="relative">
       {steps.map((s, i) => (
-        <li
-          key={s.label}
-          className={cx(
-            "flex items-center gap-2 rounded-lg border px-2.5 py-2 text-xs",
-            s.done ? "border-emerald-200 bg-emerald-50 text-emerald-900" : i === current ? "border-brand-500 bg-white font-medium text-brand-900" : "border-slate-200 bg-white text-slate-500",
-          )}
-        >
+        <li key={s.label} className="relative flex gap-3 pb-3 last:pb-0">
+          {i < steps.length - 1 && <span className={cx("absolute top-5 left-[9px] h-[calc(100%-12px)] w-px", s.done ? "bg-[#3b8a5c]/50" : "bg-line")} />}
           <span
             className={cx(
-              "flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[11px] font-semibold",
-              s.done ? "bg-emerald-600 text-white" : i === current ? "bg-brand-600 text-white" : "bg-slate-200 text-slate-600",
+              "relative z-10 mt-0.5 flex h-[19px] w-[19px] shrink-0 items-center justify-center rounded-full border text-[10px] font-semibold",
+              s.done
+                ? "border-[#3b8a5c] bg-[#3b8a5c] text-white"
+                : i === current
+                  ? "border-brand-600 bg-white text-brand-600 shadow-[0_0_0_3px_rgba(43,76,116,0.12)]"
+                  : "border-line-2 bg-white text-ink-3",
             )}
           >
-            {s.done ? "✓" : i + 1}
+            {s.done ? <Check className="h-3 w-3" strokeWidth={3} /> : i + 1}
           </span>
-          {s.label}
+          <span className={cx("text-[13px] leading-[1.45]", s.done ? "text-ink-2" : i === current ? "font-medium text-ink" : "text-ink-3")}>{s.label}</span>
         </li>
       ))}
     </ol>

@@ -2,6 +2,15 @@ import type { ObjectId } from "mongodb";
 
 export type Role = "doctor" | "admin";
 
+export interface UserPreferences {
+  /** Язык речи по умолчанию для новых приёмов. */
+  defaultLanguage?: SpeechLanguage;
+  /** Шаблон, выбранный по умолчанию при формировании документа. */
+  defaultTemplateId?: string | null;
+  /** Цвет аватара. */
+  avatarColor?: string | null;
+}
+
 export interface UserDoc {
   _id: ObjectId;
   fullName: string;
@@ -9,6 +18,13 @@ export interface UserDoc {
   passwordHash: string;
   role: Role;
   isActive: boolean;
+  /** Должность / специальность — печатается в документах. */
+  position?: string | null;
+  /** Название медицинской организации для шапки печатных форм. */
+  organization?: string | null;
+  preferences?: UserPreferences;
+  /** Увеличивается при смене пароля или «выйти на всех устройствах» — старые сессии становятся недействительными. */
+  sessionVersion?: number;
   createdAt: Date;
   updatedAt: Date;
 }

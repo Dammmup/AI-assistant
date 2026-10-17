@@ -31,6 +31,8 @@ export const PATCH = api<Ctx>(async (req, { params }) => {
         ...(body.password ? { passwordHash: await hashPassword(body.password) } : {}),
         updatedAt: new Date(),
       },
+      // Сброс пароля или отключение завершают все активные сессии пользователя.
+      ...(body.password || body.isActive === false ? { $inc: { sessionVersion: 1 } } : {}),
     },
   );
   if (!res.matchedCount) throw new HttpError(404, "Пользователь не найден");

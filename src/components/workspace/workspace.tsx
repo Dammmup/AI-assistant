@@ -5,7 +5,8 @@ import Link from "next/link";
 import { apiFetch, fmtDate, fmtDateTime } from "@/lib/client";
 import type { AppointmentDTO, SegmentDTO, TemplateDTO } from "@/lib/dto";
 import { AppointmentStatusBadge } from "../status";
-import { Alert, Button, Card } from "../ui";
+import { Alert, Badge, Button } from "../ui";
+import { ChevronLeft } from "lucide-react";
 import { ConsentCard } from "./consent-card";
 import { DocumentsCard } from "./documents-card";
 import { RecordingCard } from "./recording-card";
@@ -20,10 +21,12 @@ export function Workspace({
   initial,
   templates,
   realtimeAvailable = false,
+  defaultTemplateId = null,
 }: {
   initial: AppointmentDTO;
   templates: TemplateDTO[];
   realtimeAvailable?: boolean;
+  defaultTemplateId?: string | null;
 }) {
   const [appt, setAppt] = useState(initial);
   const [error, setError] = useState<string | null>(null);
@@ -126,67 +129,114 @@ export function Workspace({
 
   const allApproved = appt.documents.length > 0 && appt.documents.every((d) => d.status === "approved");
 
+  const consentLabel =
+    appt.consent?.status === "obtained" ? (
+      <Badge tone="green">Получено</Badge>
+    ) : appt.consent?.status === "declined" ? (
+      <Badge tone="red">Отказ</Badge>
+    ) : (
+      <Badge tone="yellow">Не зафиксировано</Badge>
+    );
+
   return (
-    <div className="space-y-5">
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <Link href={appt.status === "archived" ? "/archive" : "/appointments"} className="text-sm text-slate-500 hover:underline">
-            ← {appt.status === "archived" ? "Архив" : "Приёмы"}
-          </Link>
-          <h1 className="mt-1 text-2xl font-semibold">{appt.patient.fullName}</h1>
-          <p className="mt-1 text-sm text-slate-600">
-            {appt.patient.dateOfBirth && <>Дата рождения: {fmtDate(appt.patient.dateOfBirth)} · </>}
-            {appt.patient.externalPatientId && <>ID: {appt.patient.externalPatientId} · </>}
-            Врач: {appt.doctorName} · Создан: {fmtDateTime(appt.createdAt)}
-            {appt.startedAt && <> · Начало: {fmtDateTime(appt.startedAt)}</>}
-            {appt.endedAt && <> · Окончание: {fmtDateTime(appt.endedAt)}</>}
-          </p>
-          {appt.reason && <p className="mt-1 text-sm text-slate-600">Повод обращения: {appt.reason}</p>}
+    <div>
+      <div className="mb-6 border-b border-line pb-4">
+        <Link
+          href={appt.status === "archived" ? "/archive" : "/appointments"}
+          className="inline-flex items-center gap-1 text-[13px] text-ink-3 hover:text-ink"
+        >
+          <ChevronLeft className="h-4 w-4" /> {appt.status === "archived" ? "Архив" : "Приёмы"}
+        </Link>
+        <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-2">
+          <h1 className="text-[22px] font-semibold tracking-[-0.02em]">{appt.patient.fullName}</h1>
+          <AppointmentStatusBadge status={appt.status} />
         </div>
-        <AppointmentStatusBadge status={appt.status} />
+        {appt.reason && <p className="mt-1 text-sm text-ink-2">{appt.reason}</p>}
       </div>
 
-      <Stepper appt={appt} />
-
-      {error && <Alert>{error}</Alert>}
-
-      <ConsentCard appt={appt} onChange={refresh} />
-      {appt.consent && <RecordingCard
-          appt={appt}
-          onChange={refresh}
-          onLiveSegment={onLiveSegment}
-          onPendingChange={setPendingUploads}
-          realtimeAvailable={realtimeAvailable}
-          onUtterance={onUtterance}
-          onRoles={onRoles}
-          onRealtimeState={setRealtime}
-        />}
-      <TranscriptCard appt={appt} onChange={refresh} pendingUploads={pendingUploads} realtime={realtime} />
-      <DocumentsCard appt={appt} templates={templates} onChange={refresh} />
-
-      {appt.status === "review" && (
-        <Card title="Завершение приёма">
-          <div className="flex flex-wrap items-center gap-3">
-            <Button onClick={() => changeStatus("complete")} disabled={!allApproved} loading={busy === "complete"}>
-              Сохранить и завершить приём
-            </Button>
-            {!allApproved && <span className="text-sm text-slate-500">Сформируйте документы и подтвердите каждый из них.</span>}
-          </div>
-        </Card>
+      {error && (
+        <div className="mb-4">
+          <Alert>{error}</Alert>
+        </div>
       )}
-      {appt.status === "completed" && (
-        <Card title="Приём завершён">
-          <div className="flex flex-wrap items-center gap-3">
-            <Button onClick={() => changeStatus("archive")} loading={busy === "archive"}>
-              Перевести в архив
-            </Button>
-            <Button variant="secondary" onClick={() => changeStatus("reopen")} loading={busy === "reopen"}>
-              Вернуть на проверку
-            </Button>
+
+      <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_280px]">
+        <div className="min-w-0 space-y-5">
+          {(!appt.consent || (appt.status === "draft" && appt.consent.status !== "obtained")) && <ConsentCard appt={appt} onChange={refresh} />}
+          {appt.consent && (
+            <RecordingCard
+              appt={appt}
+              onChange={refresh}
+              onLiveSegment={onLiveSegment}
+              onPendingChange={setPendingUploads}
+              realtimeAvailable={realtimeAvailable}
+              onUtterance={onUtterance}
+              onRoles={onRoles}
+              onRealtimeState={setRealtime}
+            />
+          )}
+          <TranscriptCard appt={appt} onChange={refresh} pendingUploads={pendingUploads} realtime={realtime} />
+          <DocumentsCard appt={appt} templates={templates} defaultTemplateId={defaultTemplateId} onChange={refresh} />
+        </div>
+
+        <aside className="space-y-4 lg:sticky lg:top-6">
+          <div className="rounded-md border border-line bg-white">
+            <dl className="divide-y divide-line text-[13px]">
+              {[
+                ["Дата рождения", appt.patient.dateOfBirth ? fmtDate(appt.patient.dateOfBirth) : null],
+                ["ID пациента", appt.patient.externalPatientId],
+                ["Врач", appt.doctorName],
+                ["Создан", fmtDateTime(appt.createdAt)],
+                ["Начало", appt.startedAt ? fmtDateTime(appt.startedAt) : null],
+                ["Окончание", appt.endedAt ? fmtDateTime(appt.endedAt) : null],
+              ]
+                .filter(([, v]) => v)
+                .map(([k, v]) => (
+                  <div key={k} className="flex justify-between gap-3 px-4 py-2">
+                    <dt className="text-ink-3">{k}</dt>
+                    <dd className="text-right text-ink">{v}</dd>
+                  </div>
+                ))}
+              <div className="flex items-center justify-between gap-3 px-4 py-2">
+                <dt className="text-ink-3">Согласие</dt>
+                <dd>{consentLabel}</dd>
+              </div>
+            </dl>
           </div>
-        </Card>
-      )}
-      {appt.status === "archived" && <Alert tone="blue">Приём находится в архиве с {fmtDateTime(appt.archivedAt)}. Данные доступны только для просмотра.</Alert>}
+
+          <div className="rounded-md border border-line bg-white px-4 py-4">
+            <p className="mb-3 text-[13px] font-medium text-ink">Ход приёма</p>
+            <Stepper appt={appt} />
+          </div>
+
+          {appt.status === "review" && (
+            <div className="rounded-md border border-line bg-white px-4 py-4">
+              <p className="text-[13px] font-medium">Завершение</p>
+              <p className="mt-1 text-[13px] leading-relaxed text-ink-3">
+                {allApproved ? "Все документы подтверждены — приём можно завершить." : "Сформируйте документы и подтвердите каждый из них."}
+              </p>
+              <Button className="mt-3 w-full" onClick={() => changeStatus("complete")} disabled={!allApproved} loading={busy === "complete"}>
+                Сохранить и завершить приём
+              </Button>
+            </div>
+          )}
+          {appt.status === "completed" && (
+            <div className="rounded-md border border-line bg-white px-4 py-4">
+              <p className="text-[13px] font-medium">Приём завершён</p>
+              <p className="mt-1 text-[13px] text-ink-3">Переведите его в архив или верните на проверку.</p>
+              <div className="mt-3 flex flex-col gap-2">
+                <Button onClick={() => changeStatus("archive")} loading={busy === "archive"}>
+                  Перевести в архив
+                </Button>
+                <Button variant="secondary" onClick={() => changeStatus("reopen")} loading={busy === "reopen"}>
+                  Вернуть на проверку
+                </Button>
+              </div>
+            </div>
+          )}
+          {appt.status === "archived" && <Alert tone="blue">В архиве с {fmtDateTime(appt.archivedAt)}. Только просмотр.</Alert>}
+        </aside>
+      </div>
     </div>
   );
 }

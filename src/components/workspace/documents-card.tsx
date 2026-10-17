@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { Check, FileText, Printer } from "lucide-react";
 import { apiFetch, fmtDateTime } from "@/lib/client";
 import type { AppointmentDTO, DocumentDTO, TemplateDTO } from "@/lib/dto";
 import { approvalBlockers } from "@/lib/rules";
@@ -8,9 +9,21 @@ import type { DocumentFieldValue } from "@/lib/types";
 import { DocumentStatusBadge, FieldStatusBadge } from "../status";
 import { Alert, Button, Card, Input, Select, Textarea } from "../ui";
 
-export function DocumentsCard({ appt, templates, onChange }: { appt: AppointmentDTO; templates: TemplateDTO[]; onChange: () => Promise<void> }) {
+export function DocumentsCard({
+  appt,
+  templates,
+  onChange,
+  defaultTemplateId = null,
+}: {
+  appt: AppointmentDTO;
+  templates: TemplateDTO[];
+  onChange: () => Promise<void>;
+  defaultTemplateId?: string | null;
+}) {
   const editable = appt.status === "review";
-  const [templateId, setTemplateId] = useState(templates[0]?.id ?? "");
+  const [templateId, setTemplateId] = useState(
+    (defaultTemplateId && templates.some((t) => t.id === defaultTemplateId) ? defaultTemplateId : templates[0]?.id) ?? "",
+  );
   const [busy, setBusy] = useState<null | "ai" | "blank">(null);
   const [error, setError] = useState<string | null>(null);
   const consentOk = appt.consent?.status === "obtained";
@@ -39,7 +52,7 @@ export function DocumentsCard({ appt, templates, onChange }: { appt: Appointment
         <Card title="Медицинские документы">
           <div className="flex flex-wrap items-end gap-2">
             <label className="min-w-64 flex-1 text-sm">
-              <span className="mb-1 block font-medium text-slate-700">Шаблон</span>
+              <span className="mb-1 block font-medium text-ink-2">Шаблон</span>
               <Select value={templateId} onChange={(e) => setTemplateId(e.target.value)}>
                 {templates.map((t) => (
                   <option key={t.id} value={t.id}>
@@ -54,19 +67,19 @@ export function DocumentsCard({ appt, templates, onChange }: { appt: Appointment
               disabled={!templateId || !consentOk || !hasText || existing?.status === "approved" || appt.transcript?.status === "in_progress"}
               title={!consentOk ? "Нет согласия пациента на обработку ИИ" : !hasText ? "Транскрипция пуста" : undefined}
             >
-              ✦ Сформировать черновик (ИИ)
+              <FileText className="h-4 w-4" /> Сформировать черновик
             </Button>
             <Button variant="secondary" onClick={() => generate("blank")} loading={busy === "blank"} disabled={!templateId || existing?.status === "approved"}>
               Пустой бланк
             </Button>
           </div>
-          {busy === "ai" && <p className="mt-3 text-sm text-slate-500">ИИ анализирует транскрипцию, обычно это занимает 5–30 секунд…</p>}
+          {busy === "ai" && <p className="mt-3 text-sm text-ink-3">ИИ анализирует транскрипцию, обычно это занимает 5–30 секунд…</p>}
           {error && (
             <div className="mt-3">
               <Alert>{error}</Alert>
             </div>
           )}
-          <p className="mt-3 text-xs text-slate-500">
+          <p className="mt-3 text-xs text-ink-3">
             ИИ заполняет только поля шаблона и только сведениями из транскрипции. Поля без сведений остаются пустыми, сомнительные помечаются
             «Требует проверки». Документ не подтверждается автоматически.
           </p>
@@ -74,7 +87,7 @@ export function DocumentsCard({ appt, templates, onChange }: { appt: Appointment
       )}
       {appt.documents.length === 0 && !editable && (
         <Card title="Медицинские документы">
-          <p className="text-sm text-slate-500">Документов нет.</p>
+          <p className="text-sm text-ink-3">Документов нет.</p>
         </Card>
       )}
       {appt.documents.map((d) => (
@@ -156,8 +169,8 @@ function DocumentEditor({ doc, editable, onChange }: { doc: DocumentDTO; editabl
       }
       actions={
         <>
-          <a href={`/print/documents/${doc.id}`} target="_blank" className="rounded-lg px-2.5 py-1.5 text-sm text-slate-700 hover:bg-slate-100">
-            🖨 Печать
+          <a href={`/print/documents/${doc.id}`} target="_blank" className="inline-flex h-8 items-center gap-1.5 rounded-[5px] px-2.5 text-[13px] font-medium text-ink-2 hover:bg-black/[0.04] hover:text-ink">
+            <Printer className="h-4 w-4" /> Печать
           </a>
           {editable && doc.status !== "approved" && (
             <Button size="sm" variant="ghost" onClick={remove} loading={busy === "delete"}>
@@ -167,7 +180,7 @@ function DocumentEditor({ doc, editable, onChange }: { doc: DocumentDTO; editabl
         </>
       }
     >
-      <div className="mb-4 flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-500">
+      <div className="mb-4 flex flex-wrap gap-x-4 gap-y-1 text-xs text-ink-3">
         <span>Шаблон v{doc.templateVersion}</span>
         {doc.generatedAt && <span>Сформирован ИИ: {fmtDateTime(doc.generatedAt)}</span>}
         {doc.reviewedAt && (
@@ -176,7 +189,7 @@ function DocumentEditor({ doc, editable, onChange }: { doc: DocumentDTO; editabl
           </span>
         )}
         {doc.approvedAt && (
-          <span className="font-medium text-emerald-700">
+          <span className="font-medium text-[#22573a]">
             Подтверждён: {doc.approvedByName}, {fmtDateTime(doc.approvedAt)}
           </span>
         )}
@@ -193,25 +206,26 @@ function DocumentEditor({ doc, editable, onChange }: { doc: DocumentDTO; editabl
           const d = draft[f.key];
           const Field = f.multiline ? Textarea : Input;
           return (
-            <div key={f.key} className={v.status === "uncertain" && !locked ? "rounded-lg bg-amber-50/60 p-3 ring-1 ring-amber-200" : ""}>
+            <div key={f.key} className={v.status === "uncertain" && !locked ? "rounded-md bg-[#fdf9f0] p-3 ring-1 ring-[#ead9b0]" : ""}>
               <div className="mb-1 flex flex-wrap items-center gap-2">
-                <span className="text-sm font-medium text-slate-800">
+                <span className="text-sm font-medium text-ink">
                   {f.label}
-                  {f.required && <span className="text-red-600"> *</span>}
+                  {f.required && <span className="text-[#a3322a]"> *</span>}
                 </span>
                 <FieldStatusBadge status={v.status} />
                 {!locked && v.status !== "confirmed" && (
                   <button
                     type="button"
-                    className="text-xs font-medium text-brand-700 hover:underline"
+                    className="inline-flex items-center gap-1 text-xs font-medium text-brand-600 hover:text-brand-700"
                     onClick={() => setDraft({ ...draft, [f.key]: { ...d, confirmed: true } })}
                   >
-                    {v.status === "missing" ? "✓ Подтвердить отсутствие сведений" : "✓ Проверено"}
+                    <Check className="h-3.5 w-3.5" />
+                    {v.status === "missing" ? "Подтвердить отсутствие сведений" : "Проверено"}
                   </button>
                 )}
               </div>
               {locked ? (
-                <p className="text-sm whitespace-pre-wrap text-slate-800">{v.value || <span className="text-slate-400">—</span>}</p>
+                <p className="text-sm whitespace-pre-wrap text-ink">{v.value || <span className="text-ink-3">—</span>}</p>
               ) : (
                 <Field
                   value={d.value}
@@ -223,7 +237,7 @@ function DocumentEditor({ doc, editable, onChange }: { doc: DocumentDTO; editabl
                 />
               )}
               {v.evidence && !locked && (
-                <p className="mt-1 text-xs text-slate-500">
+                <p className="mt-1 text-xs text-ink-3">
                   Источник в транскрипции: <q className="italic">{v.evidence}</q>
                 </p>
               )}
@@ -239,17 +253,17 @@ function DocumentEditor({ doc, editable, onChange }: { doc: DocumentDTO; editabl
       )}
 
       {editable && (
-        <div className="mt-6 space-y-3 border-t border-slate-100 pt-4">
+        <div className="mt-6 space-y-3 border-t border-line pt-4">
           {doc.status !== "approved" ? (
             <>
               <div className="flex flex-wrap items-center gap-3">
                 <Button variant={dirty || doc.status !== "review" ? "primary" : "secondary"} onClick={save} loading={busy === "save"} disabled={!dirty && doc.status === "review"}>
                   {doc.status === "review" ? "Сохранить изменения" : "Сохранить и перейти к проверке"}
                 </Button>
-                {dirty && <span className="text-sm text-amber-700">Есть несохранённые изменения</span>}
+                {dirty && <span className="text-sm text-[#7a5410]">Есть несохранённые изменения</span>}
               </div>
               {doc.status === "review" && !dirty && (
-                <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+                <div className="rounded-md border border-line bg-paper p-3">
                   {blockers.length > 0 ? (
                     <Alert tone="yellow">{`Перед подтверждением проверьте поля:\n${blockers.join("\n")}`}</Alert>
                   ) : (

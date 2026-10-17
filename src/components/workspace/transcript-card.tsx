@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { ArrowLeftRight, Play } from "lucide-react";
 import { apiFetch, fmtBytes, fmtDateTime, fmtDuration } from "@/lib/client";
 import type { AppointmentDTO, SegmentDTO } from "@/lib/dto";
 import { LANGUAGE_LABEL } from "@/lib/labels";
@@ -33,14 +34,14 @@ function SpeakerChip({ who, onClick, title, voice }: { who: Who; onClick?: () =>
     who === "doctor"
       ? "bg-brand-600 text-white"
       : who === "patient"
-        ? "bg-sky-600 text-white"
+        ? "bg-[#e7eef5] text-brand-700 ring-1 ring-inset ring-brand-200"
         : voice
-          ? "bg-violet-100 text-violet-800"
-          : "bg-slate-200 text-slate-600";
+          ? "bg-[#eeeaf4] text-[#4f3b78]"
+          : "bg-line text-ink-2";
   const content = who ? LABEL[who] : voice ? `Голос ${voice}` : "—";
-  const base = cx("inline-flex h-6 w-[4.75rem] shrink-0 items-center justify-center rounded-md text-xs font-semibold", cls);
+  const base = cx("inline-flex h-6 w-[4.75rem] shrink-0 items-center justify-center rounded-[4px] text-xs font-semibold", cls);
   return onClick ? (
-    <button type="button" onClick={onClick} title={title} className={cx(base, "cursor-pointer ring-offset-1 hover:ring-2 hover:ring-slate-300")}>
+    <button type="button" onClick={onClick} title={title} className={cx(base, "cursor-pointer ring-offset-1 hover:ring-2 hover:ring-line-2")}>
       {content}
     </button>
   ) : (
@@ -60,7 +61,7 @@ function DialogView({ lines, onToggle }: { lines: Line[]; onToggle?: (i: number)
             onClick={onToggle ? () => onToggle(i) : undefined}
             title={onToggle ? "Нажмите, чтобы сменить говорящего: Врач → Пациент → без метки" : undefined}
           />
-          <p className={cx("min-w-0 flex-1 text-sm leading-relaxed", l.who === "patient" && "text-sky-950")}>{l.text}</p>
+          <p className={cx("min-w-0 flex-1 text-sm leading-relaxed", l.who === "patient" && "text-ink")}>{l.text}</p>
         </div>
       ))}
     </div>
@@ -158,13 +159,13 @@ export function TranscriptCard({
           <>
             {hasLabels && (
               <div className="flex flex-wrap items-center justify-between gap-2">
-                <div className="inline-flex rounded-lg bg-slate-100 p-1 text-sm">
+                <div className="inline-flex rounded-[5px] border border-line-2 p-0.5 text-[13px]">
                   {(["dialog", "text"] as const).map((m) => (
                     <button
                       type="button"
                       key={m}
                       onClick={() => setMode(m)}
-                      className={`rounded-md px-3 py-1 ${mode === m ? "bg-white font-medium shadow-sm" : "text-slate-600"}`}
+                      className={`rounded-[4px] px-3 py-1 ${mode === m ? "bg-ink font-medium text-white" : "text-ink-2 hover:text-ink"}`}
                     >
                       {m === "dialog" ? "Диалог" : "Редактировать текст"}
                     </button>
@@ -172,15 +173,15 @@ export function TranscriptCard({
                 </div>
                 {mode === "dialog" && (
                   <Button size="sm" variant="secondary" onClick={swapAll} title="Если разметка перепутала роли целиком">
-                    ⇄ Поменять Врач / Пациент
+                    <ArrowLeftRight className="h-4 w-4" /> Поменять Врач / Пациент
                   </Button>
                 )}
               </div>
             )}
             {showDialog ? (
-              <div className="max-h-[36rem] overflow-auto rounded-lg border border-slate-200 p-4">
+              <div className="max-h-[36rem] overflow-auto rounded-md border border-line p-4">
                 <DialogView lines={lines} onToggle={toggleSpeaker} />
-                <p className="mt-3 text-xs text-slate-500">
+                <p className="mt-3 text-xs text-ink-3">
                   Роли определены автоматически по смыслу реплик и могут ошибаться. Нажмите на метку, чтобы исправить; текст правится во вкладке
                   «Редактировать текст».
                 </p>
@@ -197,25 +198,25 @@ export function TranscriptCard({
               <Button onClick={save} disabled={!dirty} loading={saving}>
                 Сохранить транскрипцию
               </Button>
-              {dirty && <span className="text-sm text-amber-700">Есть несохранённые изменения</span>}
-              {saved && <span className="text-sm text-emerald-700">Сохранено</span>}
+              {dirty && <span className="text-sm text-[#7a5410]">Есть несохранённые изменения</span>}
+              {saved && <span className="text-sm text-[#22573a]">Сохранено</span>}
             </div>
             {error && <Alert>{error}</Alert>}
           </>
         ) : hasLabels ? (
-          <div className="max-h-[32rem] overflow-auto rounded-lg bg-slate-50 p-4">
+          <div className="max-h-[32rem] overflow-auto rounded-md bg-paper p-4">
             <DialogView lines={lines} />
           </div>
         ) : (
-          <div className="max-h-[32rem] overflow-auto rounded-lg bg-slate-50 p-4 text-sm leading-relaxed whitespace-pre-wrap">{t?.text || "—"}</div>
+          <div className="max-h-[32rem] overflow-auto rounded-md bg-paper p-4 text-sm leading-relaxed whitespace-pre-wrap">{t?.text || "—"}</div>
         )}
 
         {appt.segments.length > 0 && !live && (
-          <details className="rounded-lg border border-slate-200" open={failedCount > 0 && editable}>
-            <summary className="cursor-pointer px-3 py-2 text-sm font-medium text-slate-700">
-              Аудиофрагменты ({appt.segments.length}, {fmtBytes(appt.segments.reduce((sum, s) => sum + s.size, 0))}){failedCount > 0 && <span className="ml-2 text-amber-700">· требуют внимания: {failedCount}</span>}
+          <details className="rounded-md border border-line" open={failedCount > 0 && editable}>
+            <summary className="cursor-pointer px-3 py-2 text-sm font-medium text-ink-2">
+              Аудиофрагменты ({appt.segments.length}, {fmtBytes(appt.segments.reduce((sum, s) => sum + s.size, 0))}){failedCount > 0 && <span className="ml-2 text-[#7a5410]">· требуют внимания: {failedCount}</span>}
             </summary>
-            <div className="divide-y divide-slate-100 border-t border-slate-200">
+            <div className="divide-y divide-line border-t border-line">
               {appt.segments.map((s) => (
                 <SegmentRow key={s.id} s={s} canRetry={editable || appt.status === "processing"} onChange={onChange} />
               ))}
@@ -276,12 +277,12 @@ function LiveDialog({ appt, pendingUploads, realtime }: { appt: AppointmentDTO; 
   }, [count, pendingUploads, liveLen]);
 
   if (merged.length === 0 && pendingUploads === 0 && !live)
-    return <p className="text-sm text-slate-500">{realtime?.status === "live" ? "Говорите — слова появятся сразу…" : "Говорите — текст появится после первой фразы…"}</p>;
+    return <p className="text-sm text-ink-3">{realtime?.status === "live" ? "Говорите — слова появятся сразу…" : "Говорите — текст появится после первой фразы…"}</p>;
   return (
-    <div ref={boxRef} className="max-h-[28rem] space-y-2 overflow-auto rounded-lg bg-slate-50 p-4">
+    <div ref={boxRef} className="max-h-[28rem] space-y-2 overflow-auto rounded-md bg-paper p-4">
       {merged.map((it, i) =>
         it.kind === "note" ? (
-          <p key={i} className={cx("text-xs", it.tone === "amber" ? "text-amber-700" : "text-slate-400")}>
+          <p key={i} className={cx("text-xs", it.tone === "amber" ? "text-[#7a5410]" : "text-ink-3")}>
             {it.text}
           </p>
         ) : (
@@ -289,7 +290,7 @@ function LiveDialog({ appt, pendingUploads, realtime }: { appt: AppointmentDTO; 
             {it.labeled ? (
               <SpeakerChip who={it.who} voice={it.voice} />
             ) : (
-              <span className="inline-flex h-6 w-[4.75rem] shrink-0 items-center justify-center rounded-md bg-slate-100 text-[11px] text-slate-400">определяется</span>
+              <span className="inline-flex h-6 w-[4.75rem] shrink-0 items-center justify-center rounded-md bg-[#efede7] text-[11px] text-ink-3">определяется</span>
             )}
             <p className="min-w-0 flex-1 text-sm leading-relaxed">{it.text}</p>
           </div>
@@ -300,13 +301,13 @@ function LiveDialog({ appt, pendingUploads, realtime }: { appt: AppointmentDTO; 
           <SpeakerChip who={liveRole && liveRole !== "unknown" ? liveRole : null} voice={liveRole ? undefined : (live.speakerId ?? undefined)} />
           <p className="min-w-0 flex-1 text-sm leading-relaxed">
             {live.finalText}
-            <span className="text-slate-400 italic">{live.partialText}</span>
+            <span className="text-ink-3 italic">{live.partialText}</span>
             <span className="ml-0.5 inline-block h-3.5 w-0.5 animate-pulse bg-brand-500 align-middle" />
           </p>
         </div>
       )}
       {pendingUploads > 0 && realtime?.status !== "live" && (
-        <p className="flex items-center gap-2 text-xs text-slate-400">
+        <p className="flex items-center gap-2 text-xs text-ink-3">
           <span className="h-2 w-2 animate-pulse rounded-full bg-brand-500" /> распознаётся…
         </p>
       )}
@@ -336,9 +337,9 @@ function SegmentRow({ s, canRetry, onChange }: { s: SegmentDTO; canRetry: boolea
   return (
     <div className="space-y-2 px-3 py-2 text-sm">
       <div className="flex flex-wrap items-center gap-2">
-        <span className="font-medium text-slate-700">№{s.seq + 1}</span>
-        <span className="text-slate-500">{fmtDuration(s.durationSeconds)}</span>
-        <span className="text-slate-500" title={`${s.size.toLocaleString("ru-RU")} байт`}>
+        <span className="font-medium text-ink-2">№{s.seq + 1}</span>
+        <span className="text-ink-3">{fmtDuration(s.durationSeconds)}</span>
+        <span className="text-ink-3" title={`${s.size.toLocaleString("ru-RU")} байт`}>
           {fmtBytes(s.size)}
         </span>
         {s.source === "upload" && <Badge>файл</Badge>}
@@ -355,7 +356,7 @@ function SegmentRow({ s, canRetry, onChange }: { s: SegmentDTO; canRetry: boolea
         <span className="ml-auto flex gap-2">
           {!play && (
             <Button size="sm" variant="ghost" onClick={() => setPlay(true)}>
-              ▶ Прослушать
+              <Play className="h-3.5 w-3.5" /> Прослушать
             </Button>
           )}
           {canRetry && retryable && (
@@ -366,8 +367,8 @@ function SegmentRow({ s, canRetry, onChange }: { s: SegmentDTO; canRetry: boolea
         </span>
       </div>
       {play && <audio controls autoPlay preload="none" src={`/api/segments/${s.id}/audio`} className="h-8 w-full" />}
-      {s.error && s.status === "failed" && <p className="text-xs text-red-700">{s.error}</p>}
-      {error && <p className="text-xs text-red-700">{error}</p>}
+      {s.error && s.status === "failed" && <p className="text-xs text-[#8a2922]">{s.error}</p>}
+      {error && <p className="text-xs text-[#8a2922]">{error}</p>}
     </div>
   );
 }
