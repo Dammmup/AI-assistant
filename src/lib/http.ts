@@ -52,7 +52,10 @@ export async function parseBody<T extends z.ZodType>(req: NextRequest, schema: T
   const parsed = schema.safeParse(raw);
   if (!parsed.success) {
     const issue = parsed.error.issues[0];
-    throw new HttpError(400, issue ? `${issue.path.join(".") || "Данные"}: ${issue.message}` : "Некорректные данные");
+    if (!issue) throw new HttpError(400, "Некорректные данные");
+    // Собственные сообщения (с заглавной буквы) понятны и без указания поля.
+    const custom = /^[А-ЯЁA-Z]/.test(issue.message);
+    throw new HttpError(400, custom ? issue.message : `${issue.path.join(".") || "Данные"}: ${issue.message}`);
   }
   return parsed.data;
 }

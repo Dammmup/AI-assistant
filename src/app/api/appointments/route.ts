@@ -4,17 +4,28 @@ import { api, HttpError, ok, oid, parseBody } from "@/lib/http";
 import { requireUser } from "@/lib/auth";
 import { collections } from "@/lib/db";
 import type { AppointmentDoc, PatientDoc } from "@/lib/types";
+import { normalizeFullName, todayIso, validateBirthDate, validateFullName } from "@/lib/patient-validation";
 
 const schema = z.object({
   patientId: z.string().optional(),
   newPatient: z
     .object({
-      fullName: z.string().trim().min(3, "укажите ФИО").max(200),
+      fullName: z
+        .string()
+        .max(300)
+        .transform(normalizeFullName)
+        .superRefine((v, ctx) => {
+          const err = validateFullName(v);
+          if (err) ctx.addIssue({ code: "custom", message: err });
+        }),
       dateOfBirth: z
         .string()
-        .regex(/^\d{4}-\d{2}-\d{2}$/)
         .nullable()
-        .optional(),
+        .optional()
+        .superRefine((v, ctx) => {
+          const err = validateBirthDate(v, todayIso("Asia/Almaty"));
+          if (err) ctx.addIssue({ code: "custom", message: err });
+        }),
       externalPatientId: z.string().trim().max(100).nullable().optional(),
     })
     .optional(),

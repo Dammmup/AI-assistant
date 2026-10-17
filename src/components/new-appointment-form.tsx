@@ -5,7 +5,15 @@ import { useRouter } from "next/navigation";
 import { apiFetch, fmtDate } from "@/lib/client";
 import type { PatientDTO } from "@/lib/dto";
 import { LANGUAGE_LABEL } from "@/lib/labels";
-import { Alert, Button, Card, Input, Label, Select, Textarea } from "./ui";
+import { ageOn, formatAge, MAX_AGE, normalizeFullName, todayIso, validateBirthDate, validateFullName } from "@/lib/patient-validation";
+import { Alert, Button, Card, Input, Label, Select, Textarea, cx } from "./ui";
+
+const invalidCls = "border-[#b9443a]! hover:border-[#b9443a]! focus:shadow-[0_0_0_3px_rgba(185,68,58,0.14)]!";
+const FieldError = ({ id, children }: { id: string; children: React.ReactNode }) => (
+  <p id={id} className="mt-1.5 text-[13px] text-[#8a2922]">
+    {children}
+  </p>
+);
 
 export function NewAppointmentForm({ defaultLanguage = "ru" }: { defaultLanguage?: "ru" | "kk" | "auto" }) {
   const router = useRouter();
@@ -20,6 +28,15 @@ export function NewAppointmentForm({ defaultLanguage = "ru" }: { defaultLanguage
   const [language, setLanguage] = useState<"ru" | "kk" | "auto">(defaultLanguage);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [touched, setTouched] = useState({ fn: false, dob: false });
+  const [submitted, setSubmitted] = useState(false);
+
+  const today = todayIso();
+  const nameError = validateFullName(fullName);
+  const dobError = validateBirthDate(dateOfBirth || null, today);
+  const showNameError = (touched.fn || submitted) && !!nameError;
+  const showDobError = (touched.dob || submitted) && !!dobError;
+  const minDob = `${Number(today.slice(0, 4)) - MAX_AGE}${today.slice(4)}`;
 
   useEffect(() => {
     if (mode !== "existing") return;
@@ -35,6 +52,13 @@ export function NewAppointmentForm({ defaultLanguage = "ru" }: { defaultLanguage
     e.preventDefault();
     setError(null);
     if (mode === "existing" && !selected) return setError("Выберите пациента из списка");
+    if (mode === "new") {
+      setSubmitted(true);
+      if (nameError || dobError) {
+        document.getElementById(nameError ? "fn" : "dob")?.focus();
+        return;
+      }
+    }
     setLoading(true);
     try {
       const res = await apiFetch<{ id: string }>("/api/appointments", {
@@ -42,7 +66,7 @@ export function NewAppointmentForm({ defaultLanguage = "ru" }: { defaultLanguage
         json: {
           ...(mode === "existing"
             ? { patientId: selected!.id }
-            : { newPatient: { fullName, dateOfBirth: dateOfBirth || null, externalPatientId: externalPatientId || null } }),
+            : { newPatient: { fullName: normalizeFullName(fullName), dateOfBirth: dateOfBirth || null, externalPatientId: externalPatientId || null } }),
           reason: reason || null,
           language,
         },
@@ -55,7 +79,7 @@ export function NewAppointmentForm({ defaultLanguage = "ru" }: { defaultLanguage
   }
 
   return (
-    <form onSubmit={submit} className="space-y-4">
+    <form onSubmit={submit} className="space-y-4" noValidate>
       <Card title="Пациент">
         <div className="mb-5 inline-flex rounded-[5px] border border-line-2 p-0.5 text-[13px]">
           {(["new", "existing"] as const).map((m) => (
@@ -72,12 +96,45 @@ export function NewAppointmentForm({ defaultLanguage = "ru" }: { defaultLanguage
         {mode === "new" ? (
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="sm:col-span-2">
-              <Label htmlFor="fn">ФИО пациента *</Label>
-              <Input id="fn" value={fullName} onChange={(e) => setFullName(e.target.value)} required minLength={3} placeholder="Фамилия Имя Отчество" />
+              <Label htmlFor="fn" hint="отчество — при наличии">
+                ФИО пациента *
+              </Label>
+              <Input
+                id="fn"
+                value={fullName}
+                onChange={(e) => setFullName(e.target.value)}
+                onBlur={() => {
+                  setTouched((t) => ({ ...t, fn: true }));
+                  if (fullName.trim()) setFullName(normalizeFullName(fullName));
+                }}
+                placeholder="Фамилия Имя Отчество"
+                autoComplete="off"
+                aria-invalid={showNameError}
+                aria-describedby={showNameError ? "fn-error" : undefined}
+                className={cx(showNameError && invalidCls)}
+              />
+              {showNameError && <FieldError id="fn-error">{nameError}</FieldError>}
             </div>
             <div>
               <Label htmlFor="dob">Дата рождения</Label>
-              <Input id="dob" type="date" value={dateOfBirth} onChange={(e) => setDateOfBirth(e.target.value)} max={new Date().toISOString().slice(0, 10)} />
+              <Input
+                id="dob"
+                type="date"
+                value={dateOfBirth}
+                onChange={(e) => setDateOfBirth(e.target.value)}
+                onBlur={() => setTouched((t) => ({ ...t, dob: true }))}
+                min={minDob}
+                max={today}
+                aria-invalid={showDobError}
+                aria-describedby={showDobError ? "dob-error" : undefined}
+                className={cx(showDobError && invalidCls)}
+              />
+              {showDobError ? (
+                <FieldError id="dob-error">{dobError}</FieldError>
+              ) : (
+                dateOfBirth &&
+                !dobError && <p className="mt-1.5 text-[13px] text-ink-3">Возраст: {formatAge(ageOn(dateOfBirth, today))}</p>
+              )}
             </div>
             <div>
               <Label htmlFor="ext">ID во внешней системе</Label>
