@@ -6,6 +6,7 @@ import type { SegmentDTO } from "@/lib/dto";
 import { cx } from "../ui";
 import type { Phase, QueueItem } from "./use-segment-recorder";
 import type { RealtimeStatus } from "./use-realtime-stt";
+import { getAudioContext, micConstraints, unlockAudio } from "./audio-capture";
 
 type Light = "green" | "yellow" | "red" | "gray";
 
@@ -101,19 +102,20 @@ async function testMicrophone(durationMs = 3000): Promise<MicState> {
   if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === "undefined") return { kind: "unsupported" };
   let stream: MediaStream;
   try {
-    stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } });
+    stream = await navigator.mediaDevices.getUserMedia(micConstraints());
   } catch (err) {
     const name = (err as DOMException).name;
     if (name === "NotAllowedError" || name === "SecurityError") return { kind: "denied" };
     if (name === "NotFoundError" || name === "OverconstrainedError") return { kind: "notfound" };
     return { kind: "error", message: (err as Error).message };
   }
-  const ctx = new AudioContext();
+  const ctx = getAudioContext();
+  const source = ctx.createMediaStreamSource(stream);
   try {
     if (ctx.state === "suspended") void ctx.resume().catch(() => {});
     const analyser = ctx.createAnalyser();
     analyser.fftSize = 1024;
-    ctx.createMediaStreamSource(stream).connect(analyser);
+    source.connect(analyser);
     const buf = new Float32Array(analyser.fftSize);
     let peak = 0;
     const until = Date.now() + durationMs;
@@ -127,7 +129,7 @@ async function testMicrophone(durationMs = 3000): Promise<MicState> {
     return { kind: "tested", peak };
   } finally {
     stream.getTracks().forEach((t) => t.stop());
-    void ctx.close().catch(() => {});
+    source.disconnect();
   }
 }
 
@@ -170,6 +172,7 @@ export function Preflight({
   const recording = phase === "recording";
 
   const runMicTest = useCallback(async () => {
+    unlockAudio();
     setMic({ kind: "checking" });
     setMic(await testMicrophone());
   }, []);

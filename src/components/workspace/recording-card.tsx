@@ -7,6 +7,7 @@ import { LANGUAGE_LABEL } from "@/lib/labels";
 import { Square } from "lucide-react";
 import { Alert, Badge, Button, Card, Select } from "../ui";
 import { Preflight } from "./preflight";
+import { getNoiseSuppression, setNoiseSuppression, unlockAudio } from "./audio-capture";
 import { useRealtimeStt, type LiveUtterance, type RealtimeStatus } from "./use-realtime-stt";
 import { useSegmentRecorder, type UploadedSegment } from "./use-segment-recorder";
 import type { Speaker } from "@/lib/types";
@@ -57,6 +58,8 @@ export function RecordingCard({
     [rt.status, rt.live, onRealtimeState],
   );
   const [error, setError] = useState<string | null>(null);
+  const [noiseSuppression, setNoiseSuppressionState] = useState(false);
+  useEffect(() => setNoiseSuppressionState(getNoiseSuppression()), []);
   const [busy, setBusy] = useState<null | "upload" | "manual" | "lang" | "stop">(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
@@ -71,6 +74,8 @@ export function RecordingCard({
 
   async function start() {
     setError(null);
+    // Синхронно, в обработчике нажатия — иначе iPhone не запустит обработку звука.
+    unlockAudio();
     try {
       rec.setTranscribe(!realtimeAvailable);
       const started = await rec.start(async () => {
@@ -173,6 +178,22 @@ export function RecordingCard({
           </Alert>
         )}
 
+        {!recordingHere && canStart && (
+          <label className="flex cursor-pointer items-start gap-2.5 text-[14px]" title="Включайте только в шумном кабинете: шумоподавление может глушить дальний голос пациента">
+            <input
+              type="checkbox"
+              className="mt-0.5 h-4 w-4 accent-[#141414]"
+              checked={noiseSuppression}
+              onChange={(e) => {
+                setNoiseSuppressionState(e.target.checked);
+                setNoiseSuppression(e.target.checked);
+              }}
+            />
+            <span>
+              Шумоподавление <span className="text-ink-3">— только для шумного кабинета, может приглушать голос пациента</span>
+            </span>
+          </label>
+        )}
         <div className="flex flex-wrap items-center gap-3">
           {appt.status === "draft" && (
             <label className="flex items-center gap-2 text-sm">

@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { Speaker } from "@/lib/types";
+import { PCM_SAMPLE_RATE, recorderOptions, startPcm16k } from "./audio-capture";
 
 /** Законченная реплика потокового распознавания: один голос, до паузы или смены говорящего. */
 export type LiveUtterance = {
@@ -24,11 +25,6 @@ const TIMESLICE_MS = 120;
 
 const uid = () => (crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2)}`);
 
-function pickMime() {
-  const c = ["audio/webm;codecs=opus", "audio/webm", "audio/ogg;codecs=opus", "audio/mp4"];
-  return c.find((m) => typeof MediaRecorder !== "undefined" && MediaRecorder.isTypeSupported(m)) ?? "";
-}
-
 /**
  * Потоковое распознавание через Soniox: браузер шлёт звук напрямую по WebSocket (временный ключ выдаёт сервер),
  * слова показываются по мере произнесения, законченные реплики сохраняются на сервере.
@@ -49,6 +45,7 @@ export function useRealtimeStt(opts: {
   cbRef.current = opts;
   const wsRef = useRef<WebSocket | null>(null);
   const recRef = useRef<MediaRecorder | null>(null);
+  const pcmRef = useRef<{ stop: () => Promise<void> } | null>(null);
   const sessionRef = useRef("");
   const t0Ref = useRef(0);
   const curRef = useRef<{ speakerId: string; language: string | null; text: string; startMs: number; endMs: number } | null>(null);
@@ -141,6 +138,8 @@ export function useRealtimeStt(opts: {
     try {
       recRef.current?.state === "recording" && recRef.current.stop();
     } catch {}
+    void pcmRef.current?.stop();
+    pcmRef.current = null;
     wsRef.current?.close();
     cbRef.current.onFailed(reason);
   }, []);
@@ -161,6 +160,10 @@ export function useRealtimeStt(opts: {
         fail(`Не удалось получить доступ к Soniox: ${(err as Error).message}`);
         return false;
       }
+
+      // Несжатый PCM 16 кГц — лучшее качество распознавания и одинаковое поведение на iPhone и ПК.
+      const pcmSupported = typeof AudioWorkletNode !== "undefined";
+      if (pcmSupported) session.config = { ...session.config, audio_format: "pcm_s16le", sample_rate: PCM_SAMPLE_RATE, num_channels: 1 };
 
       // Основной способ авторизации — ключ в подпротоколе; запасной — ключ в первом сообщении.
       const connect = (legacy: boolean) =>
@@ -219,14 +222,28 @@ export function useRealtimeStt(opts: {
         fail(`соединение с Soniox прервано${gotMessage ? "" : ` (код ${ev.code})`}`);
       };
 
-      const mime = pickMime();
-      const rec = new MediaRecorder(stream, mime ? { mimeType: mime, audioBitsPerSecond: 48_000 } : undefined);
-      rec.ondataavailable = (e) => {
-        if (e.data.size && ws.readyState === WebSocket.OPEN) ws.send(e.data);
-      };
       t0Ref.current = Date.now();
-      rec.start(TIMESLICE_MS);
-      recRef.current = rec;
+      const pcm = pcmSupported
+        ? await startPcm16k(stream, (chunk) => {
+            if (ws.readyState === WebSocket.OPEN) ws.send(chunk);
+          })
+        : null;
+      if (pcm) {
+        pcmRef.current = pcm;
+      } else {
+        if (pcmSupported) {
+          // AudioWorklet не запустился, а Soniox уже ждёт PCM — переподключаться долго, считаем режим недоступным.
+          fail("не удалось запустить обработку звука в браузере");
+          return false;
+        }
+        const opts = recorderOptions();
+        const rec = new MediaRecorder(stream, opts?.mimeType ? opts : undefined);
+        rec.ondataavailable = (e) => {
+          if (e.data.size && ws.readyState === WebSocket.OPEN) ws.send(e.data);
+        };
+        rec.start(TIMESLICE_MS);
+        recRef.current = rec;
+      }
       setStatus("live");
       return true;
     },
@@ -238,6 +255,10 @@ export function useRealtimeStt(opts: {
     const ws = wsRef.current;
     const rec = recRef.current;
     stoppingRef.current = true;
+    if (pcmRef.current) {
+      await pcmRef.current.stop();
+      pcmRef.current = null;
+    }
     if (rec && rec.state !== "inactive") {
       await new Promise<void>((resolve) => {
         rec.addEventListener("stop", () => resolve(), { once: true });
@@ -270,6 +291,7 @@ export function useRealtimeStt(opts: {
       stoppingRef.current = true;
       wsRef.current?.close();
       if (recRef.current?.state === "recording") recRef.current.stop();
+      void pcmRef.current?.stop();
     },
     [],
   );

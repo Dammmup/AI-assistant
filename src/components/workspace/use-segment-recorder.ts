@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { getAudioContext, keepScreenOn, micConstraints, recorderOptions } from "./audio-capture";
 
 /**
  * Нарезка по паузам: фрагмент закрывается в паузе после фразы (не раньше MIN_SEGMENT_MS),
@@ -45,11 +46,7 @@ export type QueueItem = {
 
 export type Phase = "idle" | "starting" | "recording" | "stopping";
 
-function pickMimeType() {
-  if (typeof MediaRecorder === "undefined") return null;
-  const candidates = ["audio/webm;codecs=opus", "audio/webm", "audio/ogg;codecs=opus", "audio/mp4"];
-  return candidates.find((m) => MediaRecorder.isTypeSupported(m)) ?? "";
-}
+type RecOpts = { mimeType: string; audioBitsPerSecond: number };
 
 const extFor = (mime: string) => (mime.includes("mp4") ? "mp4" : mime.includes("ogg") ? "ogg" : "webm");
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -87,6 +84,8 @@ export function useSegmentRecorder(opts: { appointmentId: string; onSegment: (s:
   const pumpingRef = useRef(false);
   const timersRef = useRef<{ seg?: ReturnType<typeof setTimeout>; tick?: ReturnType<typeof setInterval>; meter?: ReturnType<typeof setInterval> }>({});
   const audioCtxRef = useRef<AudioContext | null>(null);
+  const meterSourceRef = useRef<MediaStreamAudioSourceNode | null>(null);
+  const wakeLockRef = useRef<{ release: () => Promise<void> } | null>(null);
   const stopResolveRef = useRef<(() => void) | null>(null);
   const startedAtRef = useRef(0);
   const onSegmentRef = useRef(opts.onSegment);
@@ -161,9 +160,10 @@ export function useSegmentRecorder(opts: { appointmentId: string; onSegment: (s:
   }, [pump]);
 
   const startSegment = useCallback(
-    (mimeType: string) => {
+    (opts: RecOpts) => {
       const stream = streamRef.current!;
-      const rec = new MediaRecorder(stream, mimeType ? { mimeType, audioBitsPerSecond: 32_000 } : undefined);
+      const mimeType = opts.mimeType;
+      const rec = new MediaRecorder(stream, mimeType ? opts : { audioBitsPerSecond: opts.audioBitsPerSecond });
       const chunks: Blob[] = [];
       const started = performance.now();
       peakRef.current = 0;
@@ -189,7 +189,7 @@ export function useSegmentRecorder(opts: { appointmentId: string; onSegment: (s:
           syncQueue();
           void pump();
         }
-        if (runningRef.current) startSegment(mimeType);
+        if (runningRef.current) startSegment(opts);
         else stopResolveRef.current?.();
       };
       rec.start();
@@ -207,8 +207,12 @@ export function useSegmentRecorder(opts: { appointmentId: string; onSegment: (s:
     clearTimeout(timersRef.current.seg);
     streamRef.current?.getTracks().forEach((t) => t.stop());
     streamRef.current = null;
-    void audioCtxRef.current?.close().catch(() => {});
+    // Общий аудиоконтекст не закрываем — только отключаем источник индикатора уровня.
+    meterSourceRef.current?.disconnect();
+    meterSourceRef.current = null;
     audioCtxRef.current = null;
+    void wakeLockRef.current?.release().catch(() => {});
+    wakeLockRef.current = null;
     setLevel(0);
   };
 
@@ -219,16 +223,14 @@ export function useSegmentRecorder(opts: { appointmentId: string; onSegment: (s:
   const start = useCallback(
     async (begin: () => Promise<number>) => {
       setError(null);
-      const mimeType = pickMimeType();
-      if (mimeType === null || !navigator.mediaDevices?.getUserMedia) {
+      const recOpts = recorderOptions();
+      if (recOpts === null || !navigator.mediaDevices?.getUserMedia) {
         setError("Браузер не поддерживает запись звука. Используйте актуальный Chrome, Edge, Firefox или Safari.");
         return false;
       }
       setPhase("starting");
       try {
-        streamRef.current = await navigator.mediaDevices.getUserMedia({
-          audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true, channelCount: 1 },
-        });
+        streamRef.current = await navigator.mediaDevices.getUserMedia(micConstraints());
       } catch (err) {
         setPhase("idle");
         const name = (err as DOMException).name;
@@ -242,10 +244,12 @@ export function useSegmentRecorder(opts: { appointmentId: string; onSegment: (s:
         return false;
       }
       try {
-        const ctx = new AudioContext();
+        const ctx = getAudioContext();
         const analyser = ctx.createAnalyser();
         analyser.fftSize = 1024;
-        ctx.createMediaStreamSource(streamRef.current).connect(analyser);
+        const source = ctx.createMediaStreamSource(streamRef.current);
+        source.connect(analyser);
+        meterSourceRef.current = source;
         audioCtxRef.current = ctx;
         // Не ждём: без активации пользователя промис может не разрешиться.
         if (ctx.state === "suspended") void ctx.resume().catch(() => {});
@@ -294,7 +298,8 @@ export function useSegmentRecorder(opts: { appointmentId: string; onSegment: (s:
       startedAtRef.current = Date.now();
       setElapsed(0);
       timersRef.current.tick = setInterval(() => setElapsed((Date.now() - startedAtRef.current) / 1000), 500);
-      startSegment(mimeType);
+      startSegment(recOpts);
+      void keepScreenOn().then((wl) => (wakeLockRef.current = wl));
       setPhase("recording");
       return true;
     },
