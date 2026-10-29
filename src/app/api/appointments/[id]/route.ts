@@ -4,6 +4,7 @@ import { requireUser } from "@/lib/auth";
 import { collections } from "@/lib/db";
 import { assertStatus, finalizeIfReady, getOwnAppointment } from "@/lib/appointments";
 import { appointmentDTO } from "@/lib/view";
+import { isAccessLocked } from "@/lib/paywall";
 
 type Ctx = { params: Promise<{ id: string }> };
 
@@ -15,7 +16,9 @@ export const GET = api<Ctx>(async (_req, { params }) => {
     await finalizeIfReady(id);
     appt = await getOwnAppointment(id, user);
   }
-  return ok(await appointmentDTO(appt));
+  const dto = await appointmentDTO(appt);
+  if (isAccessLocked()) dto.documents = [];
+  return ok(dto);
 });
 
 const schema = z.object({

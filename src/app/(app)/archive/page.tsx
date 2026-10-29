@@ -35,7 +35,7 @@ export default async function ArchivePage({ searchParams }: { searchParams: Prom
   return (
     <div className="space-y-4">
       <PageHeader kicker="Журнал" title="Архив" description="Завершённые приёмы. Доступны только для просмотра." />
-      <form className="mb-8 flex flex-wrap items-end gap-x-8 gap-y-4">
+      <form className="mb-8 flex flex-wrap items-end gap-x-8 gap-y-4" data-paywall-allow>
         <label className="relative min-w-56 flex-1 text-[13px]">
           <span className="kicker mb-1 block text-ink-2">Пациент</span>
           <Search className="pointer-events-none absolute bottom-3 left-0 h-4 w-4 text-ink-3" />

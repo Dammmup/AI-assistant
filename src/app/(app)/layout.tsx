@@ -2,6 +2,7 @@ import { requirePageUser } from "@/lib/auth";
 import { ROLE_LABEL } from "@/lib/labels";
 import { AppShell } from "@/components/shell/app-shell";
 import { SiteFooter } from "@/components/shell/footer";
+import { isAccessLocked } from "@/lib/paywall";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const user = await requirePageUser();
@@ -15,6 +16,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         avatarColor: user.preferences?.avatarColor ?? null,
       }}
       footer={<SiteFooter />}
+      locked={isAccessLocked()}
     >
       {children}
     </AppShell>

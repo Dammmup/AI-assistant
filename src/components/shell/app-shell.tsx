@@ -8,6 +8,7 @@ import { apiFetch } from "@/lib/client";
 import { cx } from "@/lib/cx";
 import { Brand } from "./brand";
 import { Avatar } from "./avatar";
+import { PaywallBanner, PaywallGuard } from "../paywall";
 
 type NavItem = { href: string; label: string; match: (p: string) => boolean };
 
@@ -25,10 +26,12 @@ export function AppShell({
   user,
   children,
   footer,
+  locked = false,
 }: {
   user: { fullName: string; roleLabel: string; position: string | null; role: "doctor" | "admin"; avatarColor: string | null };
   children: React.ReactNode;
   footer: React.ReactNode;
+  locked?: boolean;
 }) {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
@@ -75,11 +78,11 @@ export function AppShell({
                 <span className="kicker block text-ink-3">{user.position || user.roleLabel}</span>
               </span>
             </Link>
-            <button onClick={logout} className="kicker text-ink-3 hover:text-ink">
+            <button onClick={logout} className="kicker text-ink-3 hover:text-ink" data-paywall-allow>
               Выйти
             </button>
           </div>
-          <button className="ml-auto text-ink md:hidden" onClick={() => setOpen(!open)} aria-label={open ? "Закрыть меню" : "Открыть меню"}>
+          <button className="ml-auto text-ink md:hidden" onClick={() => setOpen(!open)} data-paywall-allow aria-label={open ? "Закрыть меню" : "Открыть меню"}>
             {open ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
           </button>
         </div>
@@ -95,12 +98,14 @@ export function AppShell({
                 {n.label}
               </Link>
             ))}
-            <button onClick={logout} className="kicker mt-4 text-ink-3">
+            <button onClick={logout} className="kicker mt-4 text-ink-3" data-paywall-allow>
               Выйти
             </button>
           </nav>
         )}
       </header>
+      {locked && <PaywallBanner />}
+      {locked && <PaywallGuard />}
       <main className="mx-auto w-full max-w-[1240px] flex-1 px-5 py-8 sm:px-8 sm:py-10">{children}</main>
       <div className="mx-auto w-full max-w-[1240px] px-5 pb-6 sm:px-8">
         <div className="border-t border-ink pt-4">{footer}</div>

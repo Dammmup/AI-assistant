@@ -6,6 +6,7 @@ import { finalizeIfReady } from "@/lib/appointments";
 import { appointmentDTO, templateDTO } from "@/lib/view";
 import { Workspace } from "@/components/workspace/workspace";
 import { sonioxEnabled } from "@/lib/soniox";
+import { isAccessLocked } from "@/lib/paywall";
 
 export const metadata = { title: "Приём" };
 
@@ -20,6 +21,18 @@ export default async function AppointmentPage({ params }: { params: Promise<{ id
   }
   const appt = await appointments.findOne({ _id, doctorId: user._id });
   if (!appt) notFound();
-  const [dto, tpl] = await Promise.all([appointmentDTO(appt), templates.find({ isActive: true }).sort({ name: 1 }).toArray()]);
-  return <Workspace key={dto.id} initial={dto} templates={tpl.map(templateDTO)} realtimeAvailable={sonioxEnabled()} defaultTemplateId={user.preferences?.defaultTemplateId ?? null} />;
+  const locked = isAccessLocked();
+  const [dto, tpl] = await Promise.all([appointmentDTO(appt), locked ? [] : templates.find({ isActive: true }).sort({ name: 1 }).toArray()]);
+  // До оплаты документы и шаблоны не передаются в браузер вовсе.
+  if (locked) dto.documents = [];
+  return (
+    <Workspace
+      key={dto.id}
+      initial={dto}
+      templates={tpl.map(templateDTO)}
+      realtimeAvailable={sonioxEnabled()}
+      defaultTemplateId={user.preferences?.defaultTemplateId ?? null}
+      locked={locked}
+    />
+  );
 }

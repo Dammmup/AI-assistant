@@ -164,6 +164,7 @@ export function TranscriptCard({
                       type="button"
                       key={m}
                       onClick={() => setMode(m)}
+                      data-paywall-allow={m === "dialog" ? "" : undefined}
                       className={`px-3 py-1.5 ${mode === m ? "bg-ink font-medium text-sheet" : "text-ink-2 hover:text-ink"}`}
                     >
                       {m === "dialog" ? "Диалог" : "Редактировать текст"}
@@ -354,7 +355,7 @@ function SegmentRow({ s, canRetry, onChange }: { s: SegmentDTO; canRetry: boolea
         {s.status === "pending" && (s.stale ? <Badge tone="yellow">прервано</Badge> : <Badge tone="blue">обработка</Badge>)}
         <span className="ml-auto flex gap-2">
           {!play && (
-            <Button size="sm" variant="ghost" onClick={() => setPlay(true)}>
+            <Button size="sm" variant="ghost" onClick={() => setPlay(true)} data-paywall-allow>
               <Play className="h-3.5 w-3.5" /> Прослушать
             </Button>
           )}
