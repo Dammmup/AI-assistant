@@ -13,7 +13,6 @@ import { DocumentsCard } from "./documents-card";
 import { RecordingCard } from "./recording-card";
 import { Stepper } from "./stepper";
 import { TranscriptCard } from "./transcript-card";
-import { LockedNotice } from "../paywall";
 import type { UploadedSegment } from "./use-segment-recorder";
 import type { LiveUtterance } from "./use-realtime-stt";
 import type { RealtimeLiveState } from "./recording-card";
@@ -24,13 +23,11 @@ export function Workspace({
   templates,
   realtimeAvailable = false,
   defaultTemplateId = null,
-  locked = false,
 }: {
   initial: AppointmentDTO;
   templates: TemplateDTO[];
   realtimeAvailable?: boolean;
   defaultTemplateId?: string | null;
-  locked?: boolean;
 }) {
   const [appt, setAppt] = useState(initial);
   const [error, setError] = useState<string | null>(null);
@@ -199,11 +196,7 @@ export function Workspace({
             />
           )}
           <TranscriptCard appt={appt} onChange={refresh} pendingUploads={pendingUploads} realtime={realtime} index={idx.transcript} />
-          {locked ? (
-            showDocs && <LockedNotice title="Медицинские документы" />
-          ) : (
-            <DocumentsCard appt={appt} templates={templates} defaultTemplateId={defaultTemplateId} onChange={refresh} index={idx.docs} />
-          )}
+          <DocumentsCard appt={appt} templates={templates} defaultTemplateId={defaultTemplateId} onChange={refresh} index={idx.docs} />
         </div>
 
         <aside className="space-y-8 lg:sticky lg:top-24">

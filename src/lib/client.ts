@@ -1,5 +1,3 @@
-import { PAYWALL_EVENT } from "./paywall";
-
 /** Вызов API из браузера с понятными сообщениями об ошибках. */
 export async function apiFetch<T = unknown>(url: string, init: RequestInit & { json?: unknown } = {}): Promise<T> {
   const { json, ...rest } = init;
@@ -16,9 +14,6 @@ export async function apiFetch<T = unknown>(url: string, init: RequestInit & { j
   const data = await res.json().catch(() => ({}));
   if (res.status === 401 && typeof window !== "undefined") {
     window.location.href = "/login";
-  }
-  if (res.status === 402 && (data as { paywall?: boolean }).paywall && typeof window !== "undefined") {
-    window.dispatchEvent(new Event(PAYWALL_EVENT));
   }
   if (!res.ok) throw new Error((data as { error?: string }).error || `Ошибка ${res.status}`);
   return data as T;
